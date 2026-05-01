@@ -1,0 +1,9 @@
+<svg width="620" height="170" viewBox="0 0 620 170" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Jugá en Grande variante dorada">
+  <rect x="6" y="16" width="138" height="138" rx="22" fill="#0B0B0B"/>
+  <rect x="6" y="16" width="138" height="138" rx="22" stroke="#D4AF37" stroke-width="5"/>
+  <path d="M94 55C87.8 48.9 79.6 46 69.6 46C50.6 46 36.8 59.8 36.8 79.5C36.8 99.4 51 113.6 71.5 113.6C81.8 113.6 90.5 110.2 96.8 104V87.8H71.8V75.5H111.4V108.9C102.5 120.1 88.3 126.5 70.8 126.5C42.5 126.5 21.9 106.9 21.9 79.5C21.9 52.3 42.4 33 69.9 33C83.8 33 96 37.6 105 46.6L94 55Z" fill="#F4FFF9"/>
+  <path d="M69 107H114V62" stroke="#D4AF37" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M84 92L114 62" stroke="#00FF88" stroke-width="7" stroke-linecap="round"/>
+  <text x="172" y="79" fill="#F4FFF9" font-family="Inter, Arial, sans-serif" font-size="44" font-weight="900" letter-spacing="1">JUGÁ EN</text>
+  <text x="172" y="125" fill="#D4AF37" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="900" letter-spacing="1">GRANDE</text>
+</svg>

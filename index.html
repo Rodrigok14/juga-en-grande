@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jugá en Grande | Aprendé. Crecé. Ganá.</title>
+  <meta name="description" content="Libros y guías para mejorar tu mentalidad, aprender finanzas, vender más y convertir conocimiento en dinero." />
+  <meta name="keywords" content="educación financiera, crecimiento personal, libros de dinero, mentalidad de éxito, productividad, ventas" />
+
+  <meta property="og:title" content="Jugá en Grande | Convertí conocimiento en dinero" />
+  <meta property="og:description" content="No son solo libros. Son herramientas para transformar tu vida." />
+  <meta property="og:type" content="website" />
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BookStore",
+    "name": "Jugá en Grande",
+    "description": "Plataforma de libros sobre crecimiento personal, finanzas, ventas y mentalidad de éxito",
+    "priceRange": "$$"
+  }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/home.css" />
+</head>
+<body>
+  <nav class="navbar" id="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="logo" id="logo-link" aria-label="Jugá en Grande">
+        <img src="assets/logo-mark.svg" alt="" class="logo-mark" />
+        <span class="logo-text">Jugá en <strong>Grande</strong></span>
+      </a>
+
+      <div class="search-bar-nav" id="search-bar-nav">
+        <input type="text" id="nav-search-input" placeholder="Buscá por objetivo, libro o autor..." autocomplete="off" />
+        <button id="nav-search-btn" aria-label="Buscar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        </button>
+        <div class="search-dropdown" id="search-dropdown"></div>
+      </div>
+
+      <div class="nav-actions">
+        <a href="#featured-books" class="nav-link">Libros</a>
+        <a href="#interactive" class="nav-link">Recomendador</a>
+        <a href="catalogo.html" class="nav-link">Catálogo</a>
+        <button class="nav-icon-btn cart-btn" id="cart-btn" aria-label="Carrito de compras">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          <span class="cart-badge" id="cart-count">0</span>
+        </button>
+        <button class="hamburger" id="hamburger" aria-label="Menú">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="mobile-menu" id="mobile-menu">
+      <a href="#featured-books">Libros</a>
+      <a href="#interactive">Recomendador</a>
+      <a href="catalogo.html">Catálogo</a>
+      <a href="carrito.html">Carrito</a>
+    </div>
+  </nav>
+
+  <div class="announcement-bar" id="announcement-bar">
+    <p><strong>Nuevo:</strong> colecciones para ganar más, vender mejor y construir una mente más rentable.</p>
+    <button class="announcement-close" id="ann-close" aria-label="Cerrar">×</button>
+  </div>
+
+  <main>
+    <section class="hero" id="hero">
+      <div class="hero-grid-bg"></div>
+      <div class="hero-glow hero-glow-one"></div>
+      <div class="hero-glow hero-glow-two"></div>
+
+      <div class="container hero-layout">
+        <div class="hero-content">
+          <div class="brand-kicker">Aprendé. Crecé. Ganá.</div>
+          <h1 class="hero-title">Aprendé, cambiá tu mentalidad y empezá a ganar más dinero</h1>
+          <p class="hero-subtitle">No son solo libros. Son herramientas para transformar tu vida y convertir conocimiento en dinero.</p>
+          <div class="hero-actions">
+            <a href="#featured-books" class="btn btn-primary btn-large">Empezar ahora</a>
+            <a href="#interactive" class="btn btn-secondary btn-large">Decime qué querés lograr</a>
+          </div>
+          <div class="hero-metrics" aria-label="Indicadores de transformación">
+            <div><strong>12k+</strong><span>lectores activos</span></div>
+            <div><strong>4.9/5</strong><span>valoración media</span></div>
+            <div><strong>30 días</strong><span>plan de acción</span></div>
+          </div>
+        </div>
+
+        <div class="hero-visual" aria-label="Marca Jugá en Grande con gráfico ascendente">
+          <div class="hero-logo-card">
+            <img src="assets/logo-primary.svg" alt="Jugá en Grande" />
+            <p>Convertí conocimiento en dinero</p>
+          </div>
+          <div class="growth-panel">
+            <div class="growth-header">
+              <span>Progreso mental</span>
+              <strong>+247%</strong>
+            </div>
+            <div class="growth-chart">
+              <span style="--h:34%"></span>
+              <span style="--h:48%"></span>
+              <span style="--h:61%"></span>
+              <span style="--h:78%"></span>
+              <span style="--h:92%"></span>
+            </div>
+            <svg class="chart-arrow" viewBox="0 0 220 120" fill="none" aria-hidden="true">
+              <path d="M12 100 C56 78 78 84 116 52 C144 28 166 30 206 14" stroke="#00FF88" stroke-width="5" stroke-linecap="round"/>
+              <path d="M184 12 H208 V36" stroke="#00FF88" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="mentor-card">
+            <div class="mentor-avatar"></div>
+            <div>
+              <strong>Tu mente es tu activo más rentable.</strong>
+              <span>No leas más. Leé mejor.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="transformation section-padding" id="transformation">
+      <div class="container">
+        <div class="section-header center">
+          <div class="section-label">Transformación real</div>
+          <h2 class="section-title">Libros pensados como herramientas de crecimiento</h2>
+          <p class="section-subtitle">Cada colección apunta a una habilidad concreta: pensar mejor, ganar más, vender mejor y ejecutar con disciplina.</p>
+        </div>
+        <div class="transformation-grid">
+          <article class="transformation-card">
+            <span>01</span>
+            <h3>Libros que transforman</h3>
+            <p>Ideas seleccionadas por impacto práctico, no por moda.</p>
+          </article>
+          <article class="transformation-card">
+            <span>02</span>
+            <h3>Mentalidad ganadora</h3>
+            <p>Lecturas para decidir con claridad, foco y ambición.</p>
+          </article>
+          <article class="transformation-card">
+            <span>03</span>
+            <h3>Educación que paga</h3>
+            <p>Finanzas, negocio y ventas aplicables a la vida real.</p>
+          </article>
+          <article class="transformation-card">
+            <span>04</span>
+            <h3>Acción con resultados</h3>
+            <p>Recomendaciones conectadas a objetivos concretos.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="books-section section-padding" id="featured-books">
+      <div class="container">
+        <div class="section-header-row">
+          <div>
+            <div class="section-label">Libros destacados</div>
+            <h2 class="section-title">Lecturas para jugar en grande</h2>
+          </div>
+          <a href="catalogo.html" class="see-all-link">Ver catálogo completo</a>
+        </div>
+        <div class="books-carousel premium-books" id="featured-books-grid"></div>
+      </div>
+    </section>
+
+    <section class="categories-section section-padding" id="categories">
+      <div class="container">
+        <div class="section-header center">
+          <div class="section-label">Categorías</div>
+          <h2 class="section-title">Elegí el área que querés escalar</h2>
+        </div>
+        <div class="categories-grid" id="categories-grid"></div>
+      </div>
+    </section>
+
+    <section class="interactive section-padding" id="interactive">
+      <div class="container interactive-layout">
+        <div>
+          <div class="section-label">Experiencia interactiva</div>
+          <h2 class="section-title">Decime qué querés lograr</h2>
+          <p class="section-subtitle">Ingresá tu objetivo y te mostramos una recomendación alineada a dinero, mentalidad, ventas o productividad.</p>
+        </div>
+        <div class="recommender">
+          <div class="recommender-input-row">
+            <input id="goal-input" type="text" placeholder="Ej: quiero ganar más, vender mejor, enfocarme..." />
+            <button class="btn btn-primary" id="goal-button">Recomendar</button>
+          </div>
+          <div class="recommendation-card" id="recommendation-card">
+            <span>Recomendación inicial</span>
+            <h3>Padre Rico, Padre Pobre</h3>
+            <p>Para ordenar tu mentalidad financiera y empezar a mirar el dinero como sistema.</p>
+            <a href="producto.html?slug=padre-rico-padre-pobre">Ver libro</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="reviews-section section-padding" id="social-proof">
+      <div class="container">
+        <div class="section-header center">
+          <div class="section-label">Prueba social</div>
+          <h2 class="section-title">Personas que leyeron con intención</h2>
+          <div class="reviews-summary">
+            <div class="big-rating">4.9</div>
+            <div class="rating-details">
+              <div class="stars-display">★★★★★</div>
+              <p>Más de <strong>12.000</strong> lectores construyendo mejores decisiones.</p>
+            </div>
+          </div>
+        </div>
+        <div class="reviews-grid" id="reviews-grid"></div>
+      </div>
+    </section>
+
+    <section class="final-cta section-padding" id="final-cta">
+      <div class="container final-cta-inner">
+        <div>
+          <div class="section-label">Tu cambio empieza hoy</div>
+          <h2>Dejá de acumular información. Empezá a convertirla en acción.</h2>
+        </div>
+        <div class="final-cta-actions">
+          <a href="catalogo.html" class="btn btn-primary btn-large">Ver libros</a>
+          <a href="#interactive" class="btn btn-outline btn-large">Empezar ahora</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" id="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a href="index.html" class="logo">
+            <img src="assets/logo-mark.svg" alt="" class="logo-mark" />
+            <span class="logo-text">Jugá en <strong>Grande</strong></span>
+          </a>
+          <p>Una plataforma para transformar lectura en mentalidad, mentalidad en acción y acción en resultados.</p>
+        </div>
+        <div class="footer-col">
+          <h4>Explorar</h4>
+          <ul>
+            <li><a href="catalogo.html?cat=negocios">Dinero</a></li>
+            <li><a href="catalogo.html?cat=desarrollo">Mentalidad</a></li>
+            <li><a href="catalogo.html?cat=ventas">Ventas</a></li>
+            <li><a href="catalogo.html?cat=productividad">Productividad</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Marca</h4>
+          <ul>
+            <li><a href="#transformation">Transformación</a></li>
+            <li><a href="#interactive">Recomendador</a></li>
+            <li><a href="#social-proof">Resultados</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Mensaje</h4>
+          <ul>
+            <li>Aprendé. Crecé. Ganá.</li>
+            <li>Convertí conocimiento en dinero.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© 2026 Jugá en Grande. Todos los derechos reservados.</p>
+      </div>
+    </div>
+  </footer>
+
+  <div class="cart-overlay" id="cart-overlay"></div>
+  <aside class="cart-drawer" id="cart-drawer" aria-label="Carrito de compras">
+    <div class="cart-drawer-header">
+      <h3>Tu carrito</h3>
+      <button class="cart-close" id="cart-close" aria-label="Cerrar carrito">×</button>
+    </div>
+    <div class="cart-drawer-items" id="cart-drawer-items">
+      <div class="cart-empty" id="cart-empty">
+        <div class="cart-empty-icon">JG</div>
+        <p>Tu carrito está vacío</p>
+        <a href="catalogo.html" class="btn btn-primary">Explorar libros</a>
+      </div>
+    </div>
+    <div class="cart-drawer-footer" id="cart-drawer-footer" style="display:none;">
+      <div class="cart-subtotal">
+        <span>Subtotal</span>
+        <strong id="cart-subtotal-price">$0.00</strong>
+      </div>
+      <div class="cart-free-shipping" id="cart-free-shipping"></div>
+      <a href="carrito.html" class="btn btn-primary btn-full">Ver carrito y pagar</a>
+    </div>
+  </aside>
+
+  <div class="toast" id="toast">
+    <span id="toast-msg">Añadido al carrito</span>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/home.js"></script>
+  <script src="js/analytics.js"></script>
+</body>
+</html>

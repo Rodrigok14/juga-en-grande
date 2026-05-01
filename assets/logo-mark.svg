@@ -1,0 +1,7 @@
+<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Jugá en Grande">
+  <rect x="10" y="10" width="100" height="100" rx="18" fill="#0B0B0B"/>
+  <rect x="10" y="10" width="100" height="100" rx="18" stroke="#00FF88" stroke-width="4"/>
+  <path d="M78 39C72.8 33.9 65.9 31.4 57.5 31.4C41.4 31.4 29.6 43.1 29.6 59.8C29.6 76.6 41.7 88.6 59.1 88.6C67.8 88.6 75.2 85.8 80.6 80.5V64.5H59.5V54.1H93V84.7C85.4 94.2 73.4 99.6 58.5 99.6C34.5 99.6 17 83 17 59.8C17 36.7 34.4 20.4 57.7 20.4C69.5 20.4 79.8 24.3 87.4 31.9L78 39Z" fill="#F4FFF9"/>
+  <path d="M56 80H93V43" stroke="#00FF88" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M69 67L93 43" stroke="#D4AF37" stroke-width="7" stroke-linecap="round"/>
+</svg>

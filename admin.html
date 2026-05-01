@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin | Jugá en Grande</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/admin.css" />
+</head>
+<body class="admin-body">
+  <main class="admin-shell">
+    <section class="admin-login" id="login-view">
+      <form class="admin-login-card" id="login-form">
+        <img src="assets/logo-primary.svg" alt="Jugá en Grande" />
+        <h1>Panel admin</h1>
+        <p>Ingresá para modificar productos, precios, imágenes, combos y pedidos.</p>
+        <label>
+          Usuario
+          <input type="text" id="login-user" autocomplete="username" value="admin" required />
+        </label>
+        <label>
+          Contraseña
+          <input type="password" id="login-password" autocomplete="current-password" required />
+        </label>
+        <button class="btn btn-primary btn-full" type="submit">Ingresar</button>
+        <div class="admin-message" id="login-message"></div>
+      </form>
+    </section>
+
+    <section class="admin-app" id="admin-view" hidden>
+      <header class="admin-topbar">
+        <a href="index.html" class="logo">
+          <img src="assets/logo-mark.svg" alt="" class="logo-mark" />
+          <span class="logo-text">Jugá en <strong>Grande</strong></span>
+        </a>
+        <nav class="admin-tabs">
+          <button class="admin-tab active" data-tab="products">Productos</button>
+          <button class="admin-tab" data-tab="combos">Combos</button>
+          <button class="admin-tab" data-tab="orders">Pedidos</button>
+        </nav>
+        <button class="btn btn-secondary" id="logout-btn">Salir</button>
+      </header>
+
+      <div class="admin-grid">
+        <section class="admin-panel tab-panel active" id="tab-products">
+          <div class="admin-panel-head">
+            <div>
+              <h2>Productos</h2>
+              <p>Modificá precios, stock, textos y fotos.</p>
+            </div>
+            <button class="btn btn-primary" id="new-product-btn">Nuevo producto</button>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th>Categoría</th>
+                  <th>Precio</th>
+                  <th>Stock</th>
+                  <th>Estado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="products-table"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="admin-panel tab-panel" id="tab-combos">
+          <div class="admin-panel-head">
+            <div>
+              <h2>Combos</h2>
+              <p>Armá paquetes con precio especial.</p>
+            </div>
+            <button class="btn btn-primary" id="new-combo-btn">Nuevo combo</button>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Combo</th>
+                  <th>Incluye</th>
+                  <th>Precio</th>
+                  <th>Estado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="combos-table"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="admin-panel tab-panel" id="tab-orders">
+          <div class="admin-panel-head">
+            <div>
+              <h2>Pedidos</h2>
+              <p>Pedidos creados desde checkout y estado informado por Mercado Pago.</p>
+            </div>
+            <button class="btn btn-secondary" id="refresh-orders-btn">Actualizar</button>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Cliente</th>
+                  <th>Total</th>
+                  <th>Estado</th>
+                  <th>Fecha</th>
+                </tr>
+              </thead>
+              <tbody id="orders-table"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <dialog class="admin-modal" id="product-modal">
+    <form id="product-form" method="dialog">
+      <div class="modal-head">
+        <h3 id="product-modal-title">Producto</h3>
+        <button type="button" class="modal-close" data-close-modal>×</button>
+      </div>
+      <input type="hidden" id="product-id" />
+      <div class="form-grid">
+        <label>Título<input id="product-title" name="title" required /></label>
+        <label>Slug<input id="product-slug" name="slug" required /></label>
+        <label>Autor<input id="product-author" name="author" /></label>
+        <label>Categoría
+          <select id="product-category" name="category">
+            <option value="negocios">Dinero</option>
+            <option value="desarrollo">Mentalidad</option>
+            <option value="ventas">Ventas</option>
+            <option value="productividad">Productividad</option>
+            <option value="noficcion">Conocimiento</option>
+          </select>
+        </label>
+        <label>Precio<input id="product-price" name="price" type="number" min="0" step="0.01" required /></label>
+        <label>Precio anterior<input id="product-old-price" name="oldPrice" type="number" min="0" step="0.01" /></label>
+        <label>Formato
+          <select id="product-format" name="format">
+            <option value="fisico">Físico</option>
+            <option value="digital">Digital</option>
+          </select>
+        </label>
+        <label>Stock<input id="product-stock" name="stock" type="number" min="0" step="1" required /></label>
+        <label>Estado
+          <select id="product-active" name="active">
+            <option value="1">Activo</option>
+            <option value="0">Oculto</option>
+          </select>
+        </label>
+        <label>Foto<input id="product-image" name="image" type="file" accept="image/*" /></label>
+      </div>
+      <label>Descripción<textarea id="product-description" name="description" rows="4"></textarea></label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal>Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar producto</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="admin-modal" id="combo-modal">
+    <form id="combo-form" method="dialog">
+      <div class="modal-head">
+        <h3 id="combo-modal-title">Combo</h3>
+        <button type="button" class="modal-close" data-close-modal>×</button>
+      </div>
+      <input type="hidden" id="combo-id" />
+      <div class="form-grid">
+        <label>Título<input id="combo-title" name="title" required /></label>
+        <label>Slug<input id="combo-slug" name="slug" required /></label>
+        <label>Precio final<input id="combo-price" name="price" type="number" min="0" step="0.01" required /></label>
+        <label>Estado
+          <select id="combo-active" name="active">
+            <option value="1">Activo</option>
+            <option value="0">Oculto</option>
+          </select>
+        </label>
+        <label>Foto<input id="combo-image" name="image" type="file" accept="image/*" /></label>
+      </div>
+      <label>Productos incluidos
+        <select id="combo-products" multiple size="7"></select>
+      </label>
+      <label>Descripción<textarea id="combo-description" name="description" rows="4"></textarea></label>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal>Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar combo</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast"><span id="toast-msg"></span></div>
+  <script src="js/admin.js"></script>
+</body>
+</html>

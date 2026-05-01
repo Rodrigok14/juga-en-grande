@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Checkout | Jugá en Grande</title>
+  <meta name="description" content="Finaliza tu compra de forma rápida y segura." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/checkout.css" />
+</head>
+<body>
+  <!-- Minimal nav (no distractions) -->
+  <nav class="checkout-nav">
+    <div class="container">
+      <a href="index.html" class="logo"><img src="assets/logo-mark.svg" alt="" class="logo-mark" /><span class="logo-text">Jugá en <strong>Grande</strong></span></a>
+      <div class="checkout-secure-badge"><span></span> Checkout seguro</div>
+    </div>
+  </nav>
+
+  <main class="checkout-main container">
+    <!-- Progress bar -->
+    <div class="checkout-progress" id="checkout-progress">
+      <div class="progress-step active" id="step-1-btn">
+        <div class="step-num">1</div>
+        <span>Contacto &amp; Envío</span>
+      </div>
+      <div class="progress-line"></div>
+      <div class="progress-step" id="step-2-btn">
+        <div class="step-num">2</div>
+        <span>Pago</span>
+      </div>
+    </div>
+
+    <div class="checkout-layout">
+      <!-- Form -->
+      <div class="checkout-form-wrap">
+
+        <!-- STEP 1 -->
+        <div class="checkout-step" id="step-1">
+          <h2 class="checkout-section-title">Información de contacto</h2>
+
+          <div class="guest-or-login">
+            <p>¿Ya tienes cuenta? <a href="#" class="text-link">Iniciar sesión</a></p>
+          </div>
+
+          <form id="step-1-form" novalidate>
+            <div class="form-row two-col">
+              <div class="form-group">
+                <label for="first-name">Nombre *</label>
+                <input type="text" id="first-name" name="firstName" placeholder="Juan" required />
+                <span class="field-error" id="first-name-err"></span>
+              </div>
+              <div class="form-group">
+                <label for="last-name">Apellido *</label>
+                <input type="text" id="last-name" name="lastName" placeholder="Pérez" required />
+                <span class="field-error" id="last-name-err"></span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="email">Email *</label>
+              <input type="email" id="email" name="email" placeholder="tu@email.com" required />
+              <span class="field-error" id="email-err"></span>
+            </div>
+
+            <div class="form-group">
+              <label for="phone">Teléfono</label>
+              <input type="tel" id="phone" name="phone" placeholder="+1 555 000 0000" />
+            </div>
+
+            <h2 class="checkout-section-title" style="margin-top:28px">Dirección de envío</h2>
+
+            <div class="form-group">
+              <label for="address">Dirección *</label>
+              <input type="text" id="address" name="address" placeholder="Calle y número" required />
+              <span class="field-error" id="address-err"></span>
+            </div>
+
+            <div class="form-row two-col">
+              <div class="form-group">
+                <label for="city">Ciudad *</label>
+                <input type="text" id="city" name="city" placeholder="Ciudad" required />
+              </div>
+              <div class="form-group">
+                <label for="zip">Código postal *</label>
+                <input type="text" id="zip" name="zip" placeholder="00000" required />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="country">País *</label>
+              <select id="country" name="country">
+                <option value="AR">Argentina</option>
+                <option value="MX">México</option>
+                <option value="ES">España</option>
+                <option value="CO">Colombia</option>
+                <option value="CL">Chile</option>
+                <option value="PE">Perú</option>
+                <option value="US">Estados Unidos</option>
+              </select>
+            </div>
+
+            <div class="form-check">
+              <input type="checkbox" id="save-info" name="saveInfo" />
+              <label for="save-info">Guardar mi información para la próxima compra</label>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-full btn-large" style="margin-top:20px">
+              Continuar al pago 
+            </button>
+          </form>
+        </div>
+
+        <!-- STEP 2 -->
+        <div class="checkout-step" id="step-2" style="display:none">
+          <h2 class="checkout-section-title">Método de pago</h2>
+
+          <div class="payment-methods-grid" id="payment-methods-grid">
+            <label class="payment-method-option active" id="pm-card">
+              <input type="radio" name="payment" value="card" checked />
+              <span class="pm-icon"></span>
+              <span class="pm-name">Tarjeta de crédito/débito</span>
+            </label>
+            <label class="payment-method-option" id="pm-paypal">
+              <input type="radio" name="payment" value="paypal" />
+              <span class="pm-icon"></span>
+              <span class="pm-name">PayPal</span>
+            </label>
+            <label class="payment-method-option" id="pm-mp">
+              <input type="radio" name="payment" value="mercadopago" />
+              <span class="pm-icon"></span>
+              <span class="pm-name">Mercado Pago</span>
+            </label>
+          </div>
+
+          <!-- Card form -->
+          <div class="card-form" id="card-form">
+            <div class="form-group">
+              <label for="card-number">Número de tarjeta *</label>
+              <div class="card-input-wrap">
+                <input type="text" id="card-number" placeholder="0000 0000 0000 0000" maxlength="19" />
+                <span class="card-type-icon" id="card-type-icon">x</span>
+              </div>
+            </div>
+            <div class="form-row two-col">
+              <div class="form-group">
+                <label for="card-expiry">Vencimiento *</label>
+                <input type="text" id="card-expiry" placeholder="MM / AA" maxlength="7" />
+              </div>
+              <div class="form-group">
+                <label for="card-cvv">CVV *</label>
+                <input type="text" id="card-cvv" placeholder="000" maxlength="4" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="card-name">Nombre en la tarjeta *</label>
+              <input type="text" id="card-name" placeholder="JUAN P0REZ" style="text-transform:uppercase" />
+            </div>
+          </div>
+
+          <!-- PayPal info -->
+          <div class="paypal-info" id="paypal-info" style="display:none">
+            <div class="info-box">
+              <p>Serás redirigido a PayPal para completar tu pago de forma segura.</p>
+            </div>
+          </div>
+
+          <!-- MercadoPago info -->
+          <div class="mp-info" id="mp-info" style="display:none">
+            <div class="info-box">
+              <p>Serás redirigido a Mercado Pago. Acepta cuotas sin interés.</p>
+            </div>
+          </div>
+
+          <div class="form-check" style="margin-top:16px">
+            <input type="checkbox" id="accept-terms" name="terms" required />
+            <label for="accept-terms">Acepto los <a href="#" class="text-link">Términos y condiciones</a> y la <a href="#" class="text-link">Política de privacidad</a></label>
+          </div>
+
+          <button class="btn btn-primary btn-full btn-large" id="place-order-btn" style="margin-top:20px">
+            x Confirmar pedido 
+          </button>
+
+          <button class="btn btn-secondary btn-full" id="back-to-step1" style="margin-top:10px">
+              Volver al envío
+          </button>
+        </div>
+
+        <!-- SUCCESS -->
+        <div class="checkout-success" id="checkout-success" style="display:none">
+          <div class="success-icon">OK</div>
+          <h2>¡Pedido confirmado!</h2>
+          <p>Gracias por tu compra. Recibirás un email de confirmación en breve.</p>
+          <div class="order-number">Pedido #<span id="order-num"></span></div>
+          <a href="catalogo.html" class="btn btn-primary btn-large" style="margin-top:24px">
+            Seguir comprando 
+          </a>
+        </div>
+
+      </div>
+
+      <!-- Order Summary sidebar -->
+      <aside class="checkout-summary" id="checkout-summary">
+        <h3>Tu pedido</h3>
+        <div class="checkout-items" id="checkout-items"></div>
+        <div class="summary-divider"></div>
+        <div class="summary-row"><span>Subtotal</span><strong id="co-subtotal">$0.00</strong></div>
+        <div class="summary-row"><span>Envío</span><strong id="co-shipping">Calculando⬦</strong></div>
+        <div class="summary-divider"></div>
+        <div class="summary-row total-row"><span>Total</span><strong id="co-total">$0.00</strong></div>
+        <div class="checkout-trust">
+          <div class="trust-point"><span></span> SSL 256-bit encriptado</div>
+          <div class="trust-point"><span></span> Pagos verificados</div>
+          <div class="trust-point"><span></span> 30 días devolución</div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"><span id="toast-msg"></span></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/checkout.js"></script>
+  <script src="js/analytics.js"></script>
+</body>
+</html>
+
