@@ -70,8 +70,8 @@ function bindForms() {
 }
 
 async function showAdmin() {
-  $("#login-view").hidden = true;
-  $("#admin-view").hidden = false;
+  $("#login-view").style.display = "none";
+  $("#admin-view").style.display = "block";
   await Promise.all([loadProducts(), loadCombos(), loadOrders()]);
 }
 
