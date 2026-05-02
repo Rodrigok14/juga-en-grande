@@ -10,9 +10,12 @@ const { createSession, readSession, requireAdmin, verifyAdmin } = require("./lib
 
 const app = express();
 const root = __dirname;
-const uploadsDir = path.join(root, "assets", "uploads");
+const isVercel = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+const uploadsDir = isVercel ? "/tmp" : path.join(root, "assets", "uploads");
 
-fs.mkdirSync(uploadsDir, { recursive: true });
+try {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+} catch (e) {}
 
 const upload = multer({
   storage: multer.diskStorage({
