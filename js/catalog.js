@@ -16,7 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const state = {
     q: initQ, cat: initCat, sort: initSort,
     offer: initOff, format: initFmt,
-    maxPrice: 40, page: 1, perPage: 12,
+    maxPrice: 30000, page: 1, perPage: 12,
     view: "grid"
   };
 
@@ -77,13 +77,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("clear-filters-btn")?.addEventListener("click", () => {
     state.q = ""; state.cat = ""; state.sort = "popular";
-    state.offer = false; state.format = ""; state.maxPrice = 40;
+    state.offer = false; state.format = ""; state.maxPrice = 50000;
     state.page = 1;
     document.querySelectorAll("input[name='cat']")[0].checked = true;
     document.querySelectorAll("input[name='format']")[0].checked = true;
     const pr = document.getElementById("price-range");
-    if (pr) pr.value = 40;
-    document.getElementById("price-label").textContent = "$40";
+    if (pr) pr.value = 50000;
+    document.getElementById("price-label").textContent = "$50000";
     const ofCb = document.getElementById("filter-offer");
     if (ofCb) ofCb.checked = false;
     document.getElementById("sort-select").value = "popular";
