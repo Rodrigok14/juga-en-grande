@@ -35,7 +35,7 @@ async function seedFull() {
         b.oldPrice ? moneyToCents(b.oldPrice) : null,
         b.format === "físico" ? "fisico" : "digital",
         b.stock || 10,
-        b.cover || "assets/images/book_business.png",
+        b.cover || "/assets/images/book_placeholder.svg",
         b.synopsis || "",
       ]);
     }

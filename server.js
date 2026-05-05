@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const express = require("express");
 const multer = require("multer");
+const { put } = require("@vercel/blob");
 const { MercadoPagoConfig, Preference, Payment } = require("mercadopago");
 const { pool, moneyToCents, centsToAmount } = require("./lib/db");
 const { createSession, readSession, requireAdmin, verifyAdmin } = require("./lib/auth");
@@ -12,24 +13,59 @@ const app = express();
 const root = __dirname;
 const isVercel = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
 const uploadsDir = isVercel ? "/tmp" : path.join(root, "assets", "uploads");
+const DEFAULT_IMAGE = "/assets/images/book_placeholder.svg";
 
 try {
   fs.mkdirSync(uploadsDir, { recursive: true });
 } catch (e) {}
 
+function safeUploadFilename(originalname = "image") {
+  const safe = String(originalname).toLowerCase().replace(/[^a-z0-9.]+/g, "-");
+  return `${Date.now()}-${safe || "image"}`;
+}
+
 const upload = multer({
-  storage: multer.diskStorage({
+  storage: isVercel ? multer.memoryStorage() : multer.diskStorage({
     destination: uploadsDir,
-    filename: (_req, file, cb) => {
-      const safe = file.originalname.toLowerCase().replace(/[^a-z0-9.]+/g, "-");
-      cb(null, `${Date.now()}-${safe}`);
-    }
+    filename: (_req, file, cb) => cb(null, safeUploadFilename(file.originalname))
   }),
   limits: { fileSize: 4 * 1024 * 1024 }
 });
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+function normalizeImageUrl(value) {
+  const v = String(value || "").trim();
+  if (!v) return DEFAULT_IMAGE;
+  if (/^https?:\/\//i.test(v) || v.startsWith("data:")) return v;
+  return v.startsWith("/") ? v : `/${v}`;
+}
+
+async function persistUploadedImage(file) {
+  if (!file) return null;
+  const contentType = file.mimetype || "application/octet-stream";
+  if (!/^image\//i.test(contentType)) {
+    throw new Error("El archivo subido debe ser una imagen");
+  }
+
+  // Vercel: persist to Blob and store public URL
+  if (isVercel) {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      throw new Error("Falta configurar BLOB_READ_WRITE_TOKEN para guardar imágenes en Vercel Blob");
+    }
+    const filename = safeUploadFilename(file.originalname);
+    const blob = await put(`covers/${filename}`, file.buffer, {
+      access: "public",
+      contentType,
+      token: process.env.BLOB_READ_WRITE_TOKEN
+    });
+    return blob.url;
+  }
+
+  // Local: multer already wrote to disk
+  return `/assets/uploads/${file.filename}`;
+}
 
 function productRow(row) {
   return {
@@ -42,8 +78,8 @@ function productRow(row) {
     oldPrice: row.old_price == null ? null : centsToAmount(row.old_price),
     format: row.format,
     stock: row.stock,
-    cover: row.image,
-    image: row.image,
+    cover: normalizeImageUrl(row.image),
+    image: normalizeImageUrl(row.image),
     synopsis: row.description,
     description: row.description,
     active: Boolean(row.active)
@@ -57,7 +93,7 @@ function comboRow(row, items = []) {
     title: row.title,
     price: centsToAmount(row.price),
     description: row.description,
-    image: row.image,
+    image: normalizeImageUrl(row.image),
     active: Boolean(row.active),
     items
   };
@@ -110,7 +146,8 @@ app.get("/api/products/:id", async (req, res) => {
 app.post("/api/products", requireAdmin, upload.single("image"), async (req, res) => {
   try {
     const body = req.body;
-    const image = req.file ? `assets/uploads/${req.file.filename}` : (body.image || "assets/images/book_business.png");
+    const uploaded = await persistUploadedImage(req.file);
+    const image = uploaded || normalizeImageUrl(body.image) || DEFAULT_IMAGE;
     const { rows } = await pool.query(`
       INSERT INTO products (slug, title, author, category, price, old_price, format, stock, image, description, active)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id
@@ -139,7 +176,8 @@ app.put("/api/products/:id", requireAdmin, upload.single("image"), async (req, r
     if (existingRows.length === 0) return res.status(404).json({ error: "Producto no encontrado" });
     
     const body = req.body;
-    const image = req.file ? `assets/uploads/${req.file.filename}` : (body.image || existingRows[0].image);
+    const uploaded = await persistUploadedImage(req.file);
+    const image = uploaded || normalizeImageUrl(body.image || existingRows[0].image);
     
     await pool.query(`
       UPDATE products
@@ -201,7 +239,8 @@ app.get("/api/combos", async (req, res) => {
 app.post("/api/combos", requireAdmin, upload.single("image"), async (req, res) => {
   try {
     const body = req.body;
-    const image = req.file ? `assets/uploads/${req.file.filename}` : (body.image || "assets/images/book_business.png");
+    const uploaded = await persistUploadedImage(req.file);
+    const image = uploaded || normalizeImageUrl(body.image) || DEFAULT_IMAGE;
     
     const { rows } = await pool.query(`
       INSERT INTO combos (slug, title, price, description, image, active)
@@ -222,7 +261,8 @@ app.put("/api/combos/:id", requireAdmin, upload.single("image"), async (req, res
     if (existingRows.length === 0) return res.status(404).json({ error: "Combo no encontrado" });
     
     const body = req.body;
-    const image = req.file ? `assets/uploads/${req.file.filename}` : (body.image || existingRows[0].image);
+    const uploaded = await persistUploadedImage(req.file);
+    const image = uploaded || normalizeImageUrl(body.image || existingRows[0].image);
     
     await pool.query(`
       UPDATE combos
@@ -279,7 +319,7 @@ app.get("/js/data.js", async (_req, res) => {
       reviews: 1000 + row.id * 137,
       format: row.format === "fisico" ? "físico" : "digital",
       badge: row.old_price ? "sale" : null,
-      cover: row.image,
+      cover: normalizeImageUrl(row.image),
       synopsis: row.description,
       stock: row.stock,
       pages: 240,
@@ -465,6 +505,10 @@ app.post("/api/webhooks/mercadopago", async (req, res) => {
   }
 });
 
+// Local only: serve disk uploads
+if (!isVercel) {
+  app.use("/assets/uploads", express.static(uploadsDir));
+}
 app.use(express.static(root));
 
 if (require.main === module) {
