@@ -7,7 +7,7 @@ const multer = require("multer");
 const { put } = require("@vercel/blob");
 const { MercadoPagoConfig, Preference, Payment } = require("mercadopago");
 const { pool, moneyToCents, centsToAmount } = require("./lib/db");
-const { createSession, readSession, requireAdmin, verifyAdmin } = require("./lib/auth");
+const { createSession, readSession, requireAdmin, verifyAdmin, isProduction } = require("./lib/auth");
 
 const app = express();
 const root = __dirname;
@@ -104,6 +104,12 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.post("/api/auth/login", (req, res) => {
+  if (isProduction() && !process.env.SESSION_SECRET) {
+    return res.status(500).json({ error: "Falta configurar SESSION_SECRET en Vercel (Environment Variables)." });
+  }
+  if (!process.env.ADMIN_USER || !process.env.ADMIN_PASSWORD) {
+    return res.status(500).json({ error: "Falta configurar ADMIN_USER y ADMIN_PASSWORD en Vercel (Environment Variables)." });
+  }
   const { username, password } = req.body || {};
   if (!verifyAdmin(username, password)) {
     return res.status(401).json({ error: "Usuario o contraseña incorrectos" });
