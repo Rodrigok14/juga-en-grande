@@ -54,7 +54,7 @@
         <div>
           <span class="product-preview-kicker">Muestra disponible</span>
           <h3>Leé las primeras 3 páginas antes de comprar</h3>
-          <p>Ideal para subir confianza y ayudar a que el lector decida por contenido, no solo por portada.</p>
+          <p>Abrí una vista previa del contenido y decidí con más seguridad antes de pagar.</p>
         </div>
         <button class="btn btn-secondary" id="open-preview-btn">Leer muestra</button>
       </div>
@@ -298,7 +298,7 @@
         <div class="product-preview-head">
           <span>Muestra de lectura</span>
           <h3 id="product-preview-title">Vista previa</h3>
-          <p>Primeras 3 páginas del archivo digital.</p>
+          <p>Primeras páginas disponibles para conocer el contenido antes de comprar.</p>
         </div>
         <iframe id="product-preview-frame" class="product-preview-frame" title="Muestra del libro"></iframe>
       </div>

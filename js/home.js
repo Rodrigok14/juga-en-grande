@@ -98,7 +98,7 @@
 
   function impactLine(book) {
     const lines = {
-      robert: "Pack digital listo para descargar apenas se aprueba el pago.",
+      robert: "Compralo digital y recibí el acceso cuando se apruebe el pago.",
       "padre-rico-padre-pobre": "Aprendé a pensar como dueño de activos.",
       "piense-y-hagase-rico": "Entrená tu ambición con principios de riqueza.",
       "atomic-habits": "Construí sistemas que te acerquen al resultado.",
@@ -322,7 +322,7 @@
         if (!response.ok) throw new Error(data.error || "No se pudo enviar la sugerencia");
 
         form.reset();
-        feedback.textContent = "Listo. Tu sugerencia quedó guardada para evaluar nuevos libros digitales.";
+        feedback.textContent = "Listo. Recibimos tu sugerencia para sumar nuevos libros digitales.";
         feedback.classList.add("is-success");
       } catch (error) {
         feedback.textContent = error.message;
@@ -362,7 +362,7 @@
         <div class="preview-modal-head">
           <span class="preview-modal-label">Muestra de lectura</span>
           <h3 id="preview-modal-title">Vista previa</h3>
-          <p>Primeras 3 páginas del archivo digital cargado.</p>
+          <p>Primeras páginas disponibles para conocer el contenido antes de comprar.</p>
         </div>
         <iframe class="preview-modal-frame" id="preview-modal-frame" title="Vista previa del libro"></iframe>
       </div>
