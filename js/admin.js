@@ -124,6 +124,7 @@ function renderProducts() {
       <td>
         <div class="admin-row-actions">
           <button class="admin-action" data-edit-product="${product.id}">Editar</button>
+          <button class="admin-action is-danger" data-delete-product="${product.id}">Eliminar</button>
         </div>
       </td>
     </tr>
@@ -133,6 +134,22 @@ function renderProducts() {
     button.addEventListener("click", () => {
       const product = state.products.find(item => item.id === Number(button.dataset.editProduct));
       openProductModal(product);
+    });
+  });
+
+  $$("[data-delete-product]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const product = state.products.find(item => item.id === Number(button.dataset.deleteProduct));
+      if (!product) return;
+      const confirmed = window.confirm(`Eliminar "${product.title}" de la tienda?`);
+      if (!confirmed) return;
+      try {
+        await api(`/api/products/${product.id}`, { method: "DELETE" });
+        await loadProducts();
+        showToast("Producto eliminado");
+      } catch (error) {
+        showToast(error.message);
+      }
     });
   });
 }

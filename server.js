@@ -284,6 +284,7 @@ async function sendOrderEmail(order, baseUrl) {
   if (!isValidEmail(email)) return false;
 
   const downloads = order.delivery_type === "digital" ? await listDigitalOrderItems(order) : [];
+  const attachments = order.delivery_type === "digital" ? await loadDigitalEmailAttachments(order) : [];
   const downloadHtml = downloads.length
     ? downloads.map(item => {
         const href = `${baseUrl}/api/orders/access/${order.id}/download/${item.id}?token=${encodeURIComponent(order.access_token)}`;
@@ -302,7 +303,9 @@ async function sendOrderEmail(order, baseUrl) {
       <h1 style="margin:0 0 12px;color:#00ff88">Juga en Grande</h1>
       <p style="font-size:16px;line-height:1.6">Hola ${escapeHtml(order.buyer_name || "lector")}, tu pago fue aprobado.</p>
       ${isDigital
-        ? `<p style="font-size:16px;line-height:1.6">Tus archivos digitales ya estan habilitados. Tambien podes volver a la pagina de confirmacion cuando quieras.</p>${downloadHtml}`
+        ? `<p style="font-size:16px;line-height:1.6">Tus archivos digitales ya estan habilitados. Tambien podes volver a la pagina de confirmacion cuando quieras.</p>
+           ${attachments.length ? `<p style="font-size:15px;line-height:1.6;color:#a7b8af">Adjuntamos el archivo en este email. Si tu correo bloquea el adjunto, usa los botones de descarga.</p>` : ""}
+           ${downloadHtml}`
         : `<p style="font-size:16px;line-height:1.6">Coordinaremos la entrega fisica dentro de San Miguel de Tucuman con los datos del pedido.</p>`
       }
       <p><a href="${statusHref}" style="color:#00ff88">Ver estado del pedido</a></p>
@@ -317,7 +320,8 @@ async function sendOrderEmail(order, baseUrl) {
     to: email,
     replyTo: process.env.EMAIL_REPLY_TO || process.env.SMTP_USER,
     subject,
-    html
+    html,
+    attachments
   });
 
   await pool.query(
@@ -483,6 +487,61 @@ async function listDigitalOrderItems(order) {
       fileName: row.digital_file_name || `${row.title}.pdf`,
       hasFile: Boolean(row.digital_file_url)
     }));
+}
+
+async function loadDigitalEmailAttachments(order) {
+  if (order.delivery_type !== "digital") return [];
+
+  const items = JSON.parse(order.items_json || "[]");
+  const digitalIds = items
+    .filter(item => normalizeFormat(item.format) === "digital")
+    .map(item => Number(item.id))
+    .filter(Boolean);
+
+  if (digitalIds.length === 0) return [];
+
+  const { rows } = await pool.query(
+    `SELECT id, title, digital_file_url, digital_file_name
+     FROM products
+     WHERE id = ANY($1::int[]) AND active = 1`,
+    [digitalIds]
+  );
+
+  const attachments = [];
+  let totalBytes = 0;
+  const maxTotalBytes = 18 * 1024 * 1024;
+
+  for (const row of rows) {
+    if (!row.digital_file_url) continue;
+
+    let buffer;
+    let contentType = "application/octet-stream";
+    if (/^https?:\/\//i.test(row.digital_file_url)) {
+      const remote = await fetch(row.digital_file_url);
+      if (!remote.ok) continue;
+      contentType = remote.headers.get("content-type") || contentType;
+      buffer = Buffer.from(await remote.arrayBuffer());
+    } else {
+      const absolutePath = path.resolve(row.digital_file_url);
+      if (!absolutePath.startsWith(path.resolve(privateDigitalDir))) continue;
+      buffer = fs.readFileSync(absolutePath);
+      const ext = path.extname(absolutePath).toLowerCase();
+      if (ext === ".pdf") contentType = "application/pdf";
+      if (ext === ".zip") contentType = "application/zip";
+    }
+
+    if (!buffer?.length) continue;
+    if (totalBytes + buffer.length > maxTotalBytes) continue;
+
+    totalBytes += buffer.length;
+    attachments.push({
+      filename: row.digital_file_name || `${row.title}.pdf`,
+      content: buffer,
+      contentType
+    });
+  }
+
+  return attachments;
 }
 
 app.get("/api/health", (_req, res) => {
@@ -1276,5 +1335,11 @@ if (require.main === module) {
     console.log(`Jugá en Grande escuchando en http://localhost:${port}`);
   });
 }
+
+app.locals.privateHelpers = {
+  fulfillApprovedOrder,
+  sendOrderEmail,
+  loadDigitalEmailAttachments
+};
 
 module.exports = app;
