@@ -88,10 +88,12 @@ document.addEventListener("DOMContentLoaded", () => {
   function bookCardHTML(b) {
     const discount = b.oldPrice ? Math.round((1 - b.price / b.oldPrice) * 100) : null;
     const categoryName = categoryLabel(b.category);
+    const isDigital = b.format === "digital";
     return `
-      <article class="book-card" onclick="window.location.href='producto.html?slug=${b.slug}'" style="cursor:pointer">
+      <article class="book-card ${isDigital ? "is-digital" : ""}" onclick="window.location.href='producto.html?slug=${b.slug}'" style="cursor:pointer">
         <div class="book-card-cover">
-          ${b.badge ? `<span class="book-badge ${b.badge === "sale" ? "badge-sale" : b.badge === "new" ? "badge-new" : ""}">${badgeLabel(b.badge)}</span>` : ""}
+          ${isDigital ? `<span class="book-badge">Descarga digital</span>` : ""}
+          ${!isDigital && b.badge ? `<span class="book-badge ${b.badge === "sale" ? "badge-sale" : b.badge === "new" ? "badge-new" : ""}">${badgeLabel(b.badge)}</span>` : ""}
           <button class="book-wishlist-btn" onclick="event.stopPropagation(); toggleWishlist(${b.id}, this)" aria-label="Guardar en favoritos">♡</button>
           <img src="${b.cover}" alt="Portada de ${b.title}" loading="lazy" />
           <div class="book-card-quick-add">
@@ -120,8 +122,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const featuredGrid = document.getElementById("featured-books-grid");
   if (featuredGrid) {
-    const priority = ["padre-rico-padre-pobre", "piense-y-hagase-rico", "atomic-habits", "deep-work"];
-    const books = priority.map(slug => getBookBySlug(slug)).filter(Boolean);
+    const priority = ["robert", "deep-work", "padre-rico-padre-pobre", "piense-y-hagase-rico", "atomic-habits"];
+    const priorityBooks = priority.map(slug => getBookBySlug(slug)).filter(Boolean);
+    const digitalBooks = BOOKS.filter(book => book.format === "digital" && !priorityBooks.some(item => item.id === book.id));
+    const books = [...priorityBooks.filter(book => book.format === "digital"), ...digitalBooks, ...priorityBooks.filter(book => book.format !== "digital")].slice(0, 4);
     featuredGrid.innerHTML = books.map(bookCardHTML).join("");
   }
 
