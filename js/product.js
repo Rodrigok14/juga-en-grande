@@ -240,6 +240,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (typeof Analytics !== "undefined") Analytics.addToCart(book, qty);
   });
   document.getElementById("buy-now-btn")?.addEventListener("click", () => {
+    Cart.clear();
     Cart.add(book, qty);
     window.location.href = "carrito.html";
   });
