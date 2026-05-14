@@ -710,6 +710,7 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
     const orderId = orderRows[0].id;
 
     const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
+    const isPublicHttpsBaseUrl = /^https:\/\//i.test(baseUrl) && !/localhost|127\.0\.0\.1/i.test(baseUrl);
     const preferenceBody = {
       items: [
         ...items.map(item => item.mp),
@@ -732,9 +733,12 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
         pending: `${baseUrl}/checkout.html?payment=pending&order_id=${orderId}&token=${accessToken}`,
         failure: `${baseUrl}/checkout.html?payment=failure&order_id=${orderId}&token=${accessToken}`
       },
-      auto_return: "approved",
       notification_url: `${baseUrl}/api/webhooks/mercadopago`
     };
+
+    if (isPublicHttpsBaseUrl) {
+      preferenceBody.auto_return = "approved";
+    }
 
     const client = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN });
     const preference = new Preference(client);
