@@ -1,7 +1,8 @@
 const state = {
   products: [],
   combos: [],
-  orders: []
+  orders: [],
+  customers: []
 };
 
 const $ = selector => document.querySelector(selector);
@@ -51,6 +52,7 @@ function bindTabs() {
       tab.classList.add("active");
       $(`#tab-${tab.dataset.tab}`).classList.add("active");
       if (tab.dataset.tab === "orders") loadOrders();
+      if (tab.dataset.tab === "customers") loadCustomers();
     });
   });
 }
@@ -61,6 +63,7 @@ function bindModals() {
   $("#new-product-btn")?.addEventListener("click", () => openProductModal());
   $("#new-combo-btn")?.addEventListener("click", () => openComboModal());
   $("#refresh-orders-btn")?.addEventListener("click", loadOrders);
+  $("#refresh-customers-btn")?.addEventListener("click", loadCustomers);
 }
 
 function bindForms() {
@@ -91,6 +94,12 @@ async function loadOrders() {
   const data = await api("/api/orders");
   state.orders = data.orders;
   renderOrders();
+}
+
+async function loadCustomers() {
+  const data = await api("/api/customers");
+  state.customers = data.customers;
+  renderCustomers();
 }
 
 function renderProducts() {
@@ -168,6 +177,30 @@ function renderOrders() {
       <td>${new Date(order.created_at).toLocaleString("es-AR")}</td>
     </tr>
   `).join("") || `<tr><td colspan="5" class="admin-muted">Todavia no hay pedidos.</td></tr>`;
+}
+
+function renderCustomers() {
+  const table = $("#customers-table");
+  if (!table) return;
+  table.innerHTML = state.customers.map(customer => {
+    const products = (customer.purchases || [])
+      .slice(0, 3)
+      .map(item => `${escapeHtml(item.productTitle || "-")} x${item.quantity || 1}`)
+      .join("<br>");
+    return `
+      <tr>
+        <td>
+          <strong>${escapeHtml(customer.name || "-")}</strong>
+          <div class="admin-muted">${escapeHtml(customer.email || "")}</div>
+          <div class="admin-muted">${escapeHtml(customer.phone || "")}</div>
+        </td>
+        <td>${escapeHtml(customer.country || "-")}</td>
+        <td>${customer.totalOrders}</td>
+        <td>${money(customer.totalSpent)}</td>
+        <td>${products || "-"}</td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="5" class="admin-muted">Todavia no hay clientes aprobados.</td></tr>`;
 }
 
 function openProductModal(product = null) {

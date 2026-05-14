@@ -5,6 +5,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 const express = require("express");
 const multer = require("multer");
+const nodemailer = require("nodemailer");
 const { put } = require("@vercel/blob");
 const { MercadoPagoConfig, Preference, Payment } = require("mercadopago");
 const { pool, moneyToCents, centsToAmount } = require("./lib/db");
@@ -65,6 +66,14 @@ function makeAccessToken() {
 
 function normalizeText(value) {
   return String(value || "").trim();
+}
+
+function normalizeEmail(value) {
+  return normalizeText(value).toLowerCase();
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeText(value));
 }
 
 function normalizeSearchText(value) {
@@ -169,6 +178,172 @@ async function paypalRequest(pathname, options = {}) {
 
 function amountToUsd(arsCents, usdArsRate) {
   return (Number(arsCents || 0) / 100 / usdArsRate).toFixed(2);
+}
+
+function emailConfigured() {
+  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+function mailTransporter() {
+  if (!emailConfigured()) return null;
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 465),
+    secure: String(process.env.SMTP_SECURE || "true") !== "false",
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    }
+  });
+}
+
+function emailFrom() {
+  return process.env.EMAIL_FROM || `"Juga en Grande" <${process.env.SMTP_USER || "no-reply@juga-en-grande.vercel.app"}>`;
+}
+
+function escapeHtml(value = "") {
+  return String(value).replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
+  }[char]));
+}
+
+async function recordApprovedCustomer(order) {
+  const email = normalizeEmail(order.buyer_email);
+  if (!isValidEmail(email)) return null;
+
+  const { rows: existingPurchases } = await pool.query(
+    "SELECT id FROM customer_purchases WHERE order_id = $1 LIMIT 1",
+    [order.id]
+  );
+  if (existingPurchases.length > 0) return null;
+
+  const items = JSON.parse(order.items_json || "[]");
+  const country = normalizeText(order.shipping_country || "");
+  const { rows } = await pool.query(`
+    INSERT INTO customers (
+      email, name, phone, country, first_order_id, last_order_id, total_orders, total_spent
+    )
+    VALUES ($1, $2, $3, $4, $5, $5, 1, $6)
+    ON CONFLICT (email) DO UPDATE SET
+      name = COALESCE(NULLIF(EXCLUDED.name, ''), customers.name),
+      phone = COALESCE(NULLIF(EXCLUDED.phone, ''), customers.phone),
+      country = COALESCE(NULLIF(EXCLUDED.country, ''), customers.country),
+      last_order_id = EXCLUDED.last_order_id,
+      total_orders = customers.total_orders + 1,
+      total_spent = customers.total_spent + EXCLUDED.total_spent,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING id
+  `, [
+    email,
+    normalizeText(order.buyer_name),
+    normalizeText(order.buyer_phone),
+    country,
+    order.id,
+    Number(order.total || 0)
+  ]);
+
+  const customerId = rows[0]?.id;
+  if (!customerId) return null;
+
+  for (const item of items) {
+    await pool.query(`
+      INSERT INTO customer_purchases (
+        customer_id, order_id, product_id, product_title, product_format, quantity, unit_price, payment_provider
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT (order_id, product_id) DO NOTHING
+    `, [
+      customerId,
+      order.id,
+      Number(item.id || 0) || null,
+      normalizeText(item.title),
+      normalizeFormat(item.format),
+      Math.max(1, Number(item.qty || 1)),
+      moneyToCents(item.unitPrice || 0),
+      normalizeText(order.payment_provider || "")
+    ]);
+  }
+
+  return customerId;
+}
+
+async function sendOrderEmail(order, baseUrl) {
+  if (!emailConfigured()) {
+    await pool.query(
+      "UPDATE orders SET email_error = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+      ["Email SMTP no configurado", order.id]
+    );
+    return false;
+  }
+
+  const email = normalizeEmail(order.buyer_email);
+  if (!isValidEmail(email)) return false;
+
+  const downloads = order.delivery_type === "digital" ? await listDigitalOrderItems(order) : [];
+  const downloadHtml = downloads.length
+    ? downloads.map(item => {
+        const href = `${baseUrl}/api/orders/access/${order.id}/download/${item.id}?token=${encodeURIComponent(order.access_token)}`;
+        return `<p><a href="${href}" style="display:inline-block;padding:12px 16px;background:#00ff88;color:#06100b;text-decoration:none;font-weight:800;border-radius:8px">Descargar ${escapeHtml(item.title)}</a></p>`;
+      }).join("")
+    : "";
+
+  const statusHref = `${baseUrl}/checkout.html?payment=success&order_id=${order.id}&token=${encodeURIComponent(order.access_token)}`;
+  const isDigital = order.delivery_type === "digital";
+  const subject = isDigital
+    ? `Tus descargas de Juga en Grande - Pedido #${order.id}`
+    : `Pedido confirmado Juga en Grande #${order.id}`;
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;background:#0b0b0b;color:#f4fff9;padding:28px;border-radius:12px">
+      <h1 style="margin:0 0 12px;color:#00ff88">Juga en Grande</h1>
+      <p style="font-size:16px;line-height:1.6">Hola ${escapeHtml(order.buyer_name || "lector")}, tu pago fue aprobado.</p>
+      ${isDigital
+        ? `<p style="font-size:16px;line-height:1.6">Tus archivos digitales ya estan habilitados. Tambien podes volver a la pagina de confirmacion cuando quieras.</p>${downloadHtml}`
+        : `<p style="font-size:16px;line-height:1.6">Coordinaremos la entrega fisica dentro de San Miguel de Tucuman con los datos del pedido.</p>`
+      }
+      <p><a href="${statusHref}" style="color:#00ff88">Ver estado del pedido</a></p>
+      <hr style="border:0;border-top:1px solid rgba(255,255,255,.15);margin:24px 0" />
+      <p style="color:#a7b8af;font-size:13px">Guarda este email. Si necesitas soporte, responde este mensaje.</p>
+    </div>
+  `;
+
+  const transporter = mailTransporter();
+  await transporter.sendMail({
+    from: emailFrom(),
+    to: email,
+    replyTo: process.env.EMAIL_REPLY_TO || process.env.SMTP_USER,
+    subject,
+    html
+  });
+
+  await pool.query(
+    "UPDATE orders SET email_sent_at = CURRENT_TIMESTAMP, email_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+    [order.id]
+  );
+  return true;
+}
+
+async function fulfillApprovedOrder(orderId, baseUrl) {
+  const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [orderId]);
+  const order = rows[0];
+  if (!order || order.status !== "approved") return;
+
+  await recordApprovedCustomer(order);
+  if (!order.email_sent_at) {
+    try {
+      await sendOrderEmail(order, baseUrl);
+    } catch (error) {
+      console.error("Order email error", error);
+      await pool.query(
+        "UPDATE orders SET email_error = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+        [String(error.message || error).slice(0, 500), order.id]
+      );
+    }
+  }
 }
 
 async function persistUploadedImage(file) {
@@ -632,6 +807,47 @@ app.get("/api/orders", requireAdmin, async (_req, res) => {
   }
 });
 
+app.get("/api/customers", requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT c.*, COALESCE(
+        json_agg(
+          json_build_object(
+            'productTitle', cp.product_title,
+            'productFormat', cp.product_format,
+            'quantity', cp.quantity,
+            'purchasedAt', cp.purchased_at
+          )
+          ORDER BY cp.purchased_at DESC
+        ) FILTER (WHERE cp.id IS NOT NULL),
+        '[]'
+      ) AS purchases
+      FROM customers c
+      LEFT JOIN customer_purchases cp ON cp.customer_id = c.id
+      GROUP BY c.id
+      ORDER BY c.updated_at DESC
+      LIMIT 200
+    `);
+
+    res.json({
+      customers: rows.map(row => ({
+        id: row.id,
+        email: row.email,
+        name: row.name || "",
+        phone: row.phone || "",
+        country: row.country || "",
+        totalOrders: Number(row.total_orders || 0),
+        totalSpent: centsToAmount(row.total_spent),
+        marketingOptIn: Boolean(row.marketing_opt_in),
+        updatedAt: row.updated_at,
+        purchases: row.purchases || []
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/exchange-rate", async (_req, res) => {
   try {
     const usdArsRate = await getUsdArsRate();
@@ -736,6 +952,9 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
     const cartItems = Array.isArray(req.body.items) ? req.body.items : [];
     const buyer = req.body.buyer || {};
     const shippingInfo = req.body.shipping || {};
+    if (!isValidEmail(buyer.email)) {
+      return res.status(400).json({ error: "El email es obligatorio para enviar el comprobante y la descarga" });
+    }
     const { rows: products } = await pool.query("SELECT * FROM products WHERE active = 1");
     const productMap = new Map(products.map(product => [product.id, product]));
     const productSlugMap = new Map(products.map(product => [product.slug, product]));
@@ -865,6 +1084,9 @@ app.post("/api/checkout/paypal", async (req, res) => {
     const cartItems = Array.isArray(req.body.items) ? req.body.items : [];
     const buyer = req.body.buyer || {};
     const billing = req.body.billing || {};
+    if (!isValidEmail(buyer.email)) {
+      return res.status(400).json({ error: "El email es obligatorio para enviar el comprobante y la descarga" });
+    }
     const country = normalizeText(billing.country || "").toUpperCase();
     if (!country || country === "AR") {
       return res.status(400).json({ error: "PayPal queda reservado para clientes fuera de Argentina" });
@@ -1006,6 +1228,9 @@ app.get("/api/checkout/paypal/return", async (req, res) => {
     `, [completed ? "approved" : String(capture.status || "pending").toLowerCase(), orderId]);
 
     const payment = completed ? "success" : "pending";
+    if (completed) {
+      await fulfillApprovedOrder(orderId, requestBaseUrl(req));
+    }
     res.redirect(`/checkout.html?payment=${payment}&order_id=${encodeURIComponent(orderId)}&token=${encodeURIComponent(accessToken)}`);
   } catch (error) {
     console.error("PayPal return error", error);
@@ -1031,6 +1256,9 @@ app.post("/api/webhooks/mercadopago", async (req, res) => {
       SET status = $1, mp_payment_id = $2, updated_at = CURRENT_TIMESTAMP
       WHERE id = $3
     `, [data.status || "unknown", String(paymentId), orderId]);
+    if (data.status === "approved") {
+      await fulfillApprovedOrder(orderId, requestBaseUrl(req));
+    }
   } catch (error) {
     console.error("Mercado Pago webhook error", error);
   }

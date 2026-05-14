@@ -44,6 +44,7 @@
           <button class="admin-tab active" data-tab="products">Productos</button>
           <button class="admin-tab" data-tab="combos">Combos</button>
           <button class="admin-tab" data-tab="orders">Pedidos</button>
+          <button class="admin-tab" data-tab="customers">Clientes</button>
         </nav>
         <button class="btn btn-secondary" id="logout-btn">Salir</button>
       </header>
@@ -120,6 +121,30 @@
                 </tr>
               </thead>
               <tbody id="orders-table"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="admin-panel tab-panel" id="tab-customers">
+          <div class="admin-panel-head">
+            <div>
+              <h2>Clientes</h2>
+              <p>Compradores aprobados, productos comprados y datos utiles para seguimiento.</p>
+            </div>
+            <button class="btn btn-secondary" id="refresh-customers-btn">Actualizar</button>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Pais</th>
+                  <th>Compras</th>
+                  <th>Total</th>
+                  <th>Ultimos productos</th>
+                </tr>
+              </thead>
+              <tbody id="customers-table"></tbody>
             </table>
           </div>
         </section>
