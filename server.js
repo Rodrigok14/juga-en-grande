@@ -9,6 +9,7 @@ const nodemailer = require("nodemailer");
 const AdmZip = require("adm-zip");
 const { PDFDocument } = require("pdf-lib");
 const { put } = require("@vercel/blob");
+const { handleUpload } = require("@vercel/blob/client");
 const { MercadoPagoConfig, Preference, Payment } = require("mercadopago");
 const { pool, moneyToCents, centsToAmount } = require("./lib/db");
 const { createSession, readSession, requireAdmin, verifyAdmin, isProduction } = require("./lib/auth");
@@ -73,6 +74,16 @@ function parseJsonArray(value) {
     return Array.isArray(parsed) ? parsed : [];
   } catch (_error) {
     return [];
+  }
+}
+
+function parseJsonObject(value) {
+  if (!value) return null;
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch (_error) {
+    return null;
   }
 }
 
@@ -474,6 +485,25 @@ async function persistUploadedImages(files = []) {
   return uploaded;
 }
 
+function normalizeClientBlob(blob) {
+  if (!blob || typeof blob !== "object") return null;
+  const url = String(blob.url || blob.downloadUrl || "").trim();
+  if (!/^https?:\/\//i.test(url)) return null;
+  return {
+    url,
+    name: String(blob.pathname || blob.name || url.split("/").pop() || "archivo").split("/").pop(),
+    contentType: String(blob.contentType || blob.type || "")
+  };
+}
+
+function clientBlobFromBody(body, fieldname) {
+  return normalizeClientBlob(parseJsonObject(body?.[fieldname]));
+}
+
+function clientBlobsFromBody(body, fieldname) {
+  return parseJsonArray(body?.[fieldname]).map(normalizeClientBlob).filter(Boolean);
+}
+
 async function persistBinaryFile({ folder, filename, buffer, contentType }) {
   const safeName = safeUploadFilename(filename);
 
@@ -549,6 +579,110 @@ async function loadStoredDigitalEntries(fileUrl, fileName) {
   }
 
   return [];
+}
+
+async function persistClientUploadedDigitalFiles(blobFiles = [], options = {}) {
+  const normalizedFiles = blobFiles.map(normalizeClientBlob).filter(Boolean);
+  if (normalizedFiles.length === 0) return null;
+
+  const pdfFiles = [];
+  let zipFile = null;
+
+  for (const file of normalizedFiles) {
+    const extension = path.extname(file.name || file.url || "").toLowerCase();
+    const isPdf = file.contentType === "application/pdf" || extension === ".pdf";
+    const isZip = file.contentType === "application/zip" || file.contentType === "application/x-zip-compressed" || extension === ".zip";
+
+    if (isPdf) {
+      pdfFiles.push(file);
+      continue;
+    }
+
+    if (isZip) {
+      if (normalizedFiles.length > 1) {
+        throw new Error("Sube un ZIP o varios PDF, pero no mezcles ambos formatos");
+      }
+      zipFile = file;
+      continue;
+    }
+
+    throw new Error("El archivo digital debe ser PDF o ZIP");
+  }
+
+  if (zipFile) {
+    const manifest = await loadStoredDigitalEntries(zipFile.url, zipFile.name)
+      .then(entries => entries.map(entry => entry.name))
+      .catch(() => [zipFile.name || "archivo-digital.zip"]);
+    return {
+      url: zipFile.url,
+      name: zipFile.name || "archivo-digital.zip",
+      manifest,
+      previewUrl: null,
+      previewName: null
+    };
+  }
+
+  const shouldMergeWithExisting = Boolean(options.existingUrl) && pdfFiles.length > 0;
+
+  if (pdfFiles.length === 1 && !shouldMergeWithExisting) {
+    const pdfFile = pdfFiles[0];
+    const preview = await buildPdfPreviewFromStoredFile(pdfFile.url, pdfFile.name).catch(error => {
+      console.error("Preview generation error", error);
+      return null;
+    });
+    return {
+      url: pdfFile.url,
+      name: pdfFile.name || "archivo-digital.pdf",
+      manifest: [pdfFile.name || "archivo-digital.pdf"],
+      previewUrl: preview?.url || null,
+      previewName: preview?.name || null
+    };
+  }
+
+  if (pdfFiles.length > 1 || shouldMergeWithExisting) {
+    const zip = new AdmZip();
+    const manifest = [];
+
+    if (shouldMergeWithExisting) {
+      const existingEntries = await loadStoredDigitalEntries(options.existingUrl, options.existingName);
+      for (const entry of existingEntries) {
+        const entryName = uniqueZipEntryName(zip, entry.name);
+        zip.addFile(entryName, entry.buffer);
+        manifest.push(entryName);
+      }
+    }
+
+    for (const file of pdfFiles) {
+      const entryName = uniqueZipEntryName(zip, file.name || "archivo.pdf");
+      zip.addFile(entryName, await digitalBufferFromStoredUrl(file.url));
+      manifest.push(entryName);
+    }
+
+    const zipBuffer = zip.toBuffer();
+    const existingName = String(options.existingName || "");
+    const zipName = existingName.toLowerCase().endsWith(".zip")
+      ? existingName
+      : `pack-${Date.now()}.zip`;
+    const storedUrl = await persistBinaryFile({
+      folder: "digital-products",
+      filename: zipName,
+      buffer: zipBuffer,
+      contentType: "application/zip"
+    });
+    const preview = await buildPdfPreviewFromStoredFile(pdfFiles[0].url, pdfFiles[0].name).catch(error => {
+      console.error("Preview generation error", error);
+      return null;
+    });
+    return {
+      url: storedUrl,
+      name: zipName,
+      manifest,
+      previewUrl: preview?.url || null,
+      previewName: preview?.name || null
+    };
+  }
+
+  return null;
 }
 
 async function buildComboDigitalPack(combo, products) {
@@ -1011,6 +1145,36 @@ app.get("/api/auth/me", (req, res) => {
   res.json({ authenticated: Boolean(session), user: session?.username || null });
 });
 
+app.post("/api/blob/upload", async (req, res) => {
+  try {
+    const jsonResponse = await handleUpload({
+      body: req.body,
+      request: req,
+      onBeforeGenerateToken: async (_pathname, clientPayload) => {
+        const session = readSession(req);
+        if (!session) throw new Error("No autorizado");
+        const payload = parseJsonObject(clientPayload) || {};
+        const type = String(payload.type || "");
+        const allowedContentTypes = type === "image"
+          ? ["image/jpeg", "image/png", "image/webp", "image/gif"]
+          : ["application/pdf", "application/zip", "application/x-zip-compressed"];
+        return {
+          allowedContentTypes,
+          maximumSizeInBytes: 100 * 1024 * 1024,
+          addRandomSuffix: true,
+          tokenPayload: clientPayload || null
+        };
+      },
+      onUploadCompleted: async () => {}
+    });
+
+    res.json(jsonResponse);
+  } catch (err) {
+    console.error("Blob client upload error", err);
+    res.status(400).json({ error: err.message || "No se pudo preparar la subida" });
+  }
+});
+
 app.get("/api/products", async (req, res) => {
   try {
     const adminSession = readSession(req);
@@ -1085,10 +1249,15 @@ app.post("/api/products", requireAdmin, productUpload, async (req, res) => {
     const galleryImageFiles = uploadedFiles(req, "galleryImages");
     const digitalFile = uploadedFile(req, "digitalFile");
     const digitalFiles = uploadedFiles(req, "digitalFiles");
+    const imageBlob = clientBlobFromBody(body, "imageBlob");
+    const galleryImageBlobs = clientBlobsFromBody(body, "galleryImageBlobs");
+    const digitalFileBlobs = clientBlobsFromBody(body, "digitalFileBlobs");
     const uploaded = await persistUploadedImage(imageFile);
     const uploadedGalleryImages = await persistUploadedImages(galleryImageFiles);
-    const uploadedDigital = await persistUploadedDigitalFile(digitalFile, digitalFiles);
-    const image = uploaded || normalizeImageUrl(body.image) || DEFAULT_IMAGE;
+    const uploadedDigital = digitalFileBlobs.length
+      ? await persistClientUploadedDigitalFiles(digitalFileBlobs)
+      : await persistUploadedDigitalFile(digitalFile, digitalFiles);
+    const image = uploaded || imageBlob?.url || normalizeImageUrl(body.image) || DEFAULT_IMAGE;
     if (format === "digital" && !uploadedDigital) {
       return res.status(400).json({ error: "Los productos digitales deben incluir un PDF o ZIP" });
     }
@@ -1097,7 +1266,7 @@ app.post("/api/products", requireAdmin, productUpload, async (req, res) => {
     const digitalFilesManifest = format === "digital" ? JSON.stringify(uploadedDigital?.manifest || []) : null;
     const previewFileUrl = format === "digital" ? uploadedDigital?.previewUrl || null : null;
     const previewFileName = format === "digital" ? uploadedDigital?.previewName || null : null;
-    const galleryImages = JSON.stringify(uploadedGalleryImages);
+    const galleryImages = JSON.stringify(uploadedGalleryImages.length ? uploadedGalleryImages : galleryImageBlobs.map(blob => blob.url));
     const { rows } = await pool.query(`
       INSERT INTO products (
         slug, title, author, category, price, old_price, format, stock, image, description,
@@ -1143,15 +1312,25 @@ app.put("/api/products/:id", requireAdmin, productUpload, async (req, res) => {
     const galleryImageFiles = uploadedFiles(req, "galleryImages");
     const digitalFile = uploadedFile(req, "digitalFile");
     const digitalFiles = uploadedFiles(req, "digitalFiles");
+    const imageBlob = clientBlobFromBody(body, "imageBlob");
+    const galleryImageBlobs = clientBlobsFromBody(body, "galleryImageBlobs");
+    const digitalFileBlobs = clientBlobsFromBody(body, "digitalFileBlobs");
     const uploaded = await persistUploadedImage(imageFile);
     const uploadedGalleryImages = await persistUploadedImages(galleryImageFiles);
-    const uploadedDigital = await persistUploadedDigitalFile(digitalFile, digitalFiles, {
+    const digitalOptions = {
       existingUrl: existingRows[0].digital_file_url,
       existingName: existingRows[0].digital_file_name
-    });
-    const image = uploaded || normalizeImageUrl(body.image || existingRows[0].image);
+    };
+    const uploadedDigital = digitalFileBlobs.length
+      ? await persistClientUploadedDigitalFiles(digitalFileBlobs, digitalOptions)
+      : await persistUploadedDigitalFile(digitalFile, digitalFiles, digitalOptions);
+    const image = uploaded || imageBlob?.url || normalizeImageUrl(body.image || existingRows[0].image);
     const currentGalleryImages = parseJsonArray(existingRows[0].gallery_images).map(normalizeImageUrl).filter(Boolean);
-    const galleryImages = uploadedGalleryImages.length > 0 ? uploadedGalleryImages : currentGalleryImages;
+    const galleryImages = uploadedGalleryImages.length > 0
+      ? uploadedGalleryImages
+      : galleryImageBlobs.length > 0
+        ? galleryImageBlobs.map(blob => blob.url)
+        : currentGalleryImages;
     const digitalFileUrl = format === "digital"
       ? (uploadedDigital?.url || existingRows[0].digital_file_url || null)
       : null;

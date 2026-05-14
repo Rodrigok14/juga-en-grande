@@ -348,10 +348,6 @@ async function saveProduct(event) {
     if (!id && format === "digital" && digitalFiles.length === 0) {
       throw new Error("Para un producto digital nuevo debes subir al menos un PDF o ZIP");
     }
-    if (digitalFiles.some(file => file.size > 25 * 1024 * 1024)) {
-      throw new Error("Cada archivo debe pesar menos de 25 MB. Si tienes muchos PDFs, subelos de a poco o comprimilos.");
-    }
-
     form.set("title", title);
     form.set("slug", slug);
     form.set("author", $("#product-author").value.trim());
@@ -363,9 +359,33 @@ async function saveProduct(event) {
     form.set("stock", $("#product-stock").value);
     form.set("active", $("#product-active").value);
     form.set("description", $("#product-description").value.trim());
-    if ($("#product-image").files[0]) form.set("image", $("#product-image").files[0]);
-    [...$("#product-gallery-images").files].slice(0, 3).forEach(file => form.append("galleryImages", file));
-    digitalFiles.forEach(file => form.append("digitalFiles", file));
+    const shouldUseBlobUpload = canUseClientBlobUpload();
+    const imageFile = $("#product-image").files[0] || null;
+    const galleryFiles = [...$("#product-gallery-images").files].slice(0, 3);
+    if (shouldUseBlobUpload) {
+      if (imageFile) {
+        const imageBlob = await uploadAdminFile(imageFile, "image", submitButton);
+        form.set("imageBlob", JSON.stringify(imageBlob));
+      }
+      if (galleryFiles.length) {
+        const galleryBlobs = [];
+        for (const file of galleryFiles) {
+          galleryBlobs.push(await uploadAdminFile(file, "image", submitButton));
+        }
+        form.set("galleryImageBlobs", JSON.stringify(galleryBlobs));
+      }
+      if (digitalFiles.length) {
+        const digitalBlobs = [];
+        for (const file of digitalFiles) {
+          digitalBlobs.push(await uploadAdminFile(file, "digital", submitButton));
+        }
+        form.set("digitalFileBlobs", JSON.stringify(digitalBlobs));
+      }
+    } else {
+      if (imageFile) form.set("image", imageFile);
+      galleryFiles.forEach(file => form.append("galleryImages", file));
+      digitalFiles.forEach(file => form.append("digitalFiles", file));
+    }
     await api(id ? `/api/products/${id}` : "/api/products", { method: id ? "PUT" : "POST", body: form });
     closeModals();
     await loadProducts();
@@ -424,6 +444,37 @@ function setFormState(button, isLoading, label = "Guardando...") {
   button.textContent = button.dataset.originalText || button.textContent;
   button.disabled = false;
   button.classList.remove("is-loading");
+}
+
+function canUseClientBlobUpload() {
+  return location.hostname !== "localhost" && location.hostname !== "127.0.0.1";
+}
+
+async function uploadAdminFile(file, type, button) {
+  if (!window.__vercelBlobClient) {
+    window.__vercelBlobClient = import("https://esm.sh/@vercel/blob@1.1.1/client");
+  }
+  const { upload } = await window.__vercelBlobClient;
+  const safeName = String(file.name || "archivo")
+    .toLowerCase()
+    .replace(/[^a-z0-9.]+/g, "-");
+  const folder = type === "image" ? "admin-images" : "admin-digital";
+  const blob = await upload(`${folder}/${Date.now()}-${safeName}`, file, {
+    access: "public",
+    multipart: file.size > 8 * 1024 * 1024,
+    handleUploadUrl: "/api/blob/upload",
+    clientPayload: JSON.stringify({ type }),
+    onUploadProgress: event => {
+      const percent = Math.round((event.loaded / event.total) * 100);
+      setFormState(button, true, `Subiendo ${file.name} ${percent}%`);
+    }
+  });
+  return {
+    url: blob.url,
+    pathname: blob.pathname || safeName,
+    name: file.name,
+    contentType: file.type
+  };
 }
 
 function money(value) {
