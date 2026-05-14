@@ -1287,6 +1287,31 @@ app.put("/api/combos/:id", requireAdmin, upload.single("image"), async (req, res
   }
 });
 
+app.delete("/api/combos/:id", requireAdmin, async (req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT * FROM combos WHERE id = $1", [req.params.id]);
+    const combo = rows[0];
+    if (!combo) return res.status(404).json({ error: "Combo no encontrado" });
+
+    await pool.query("UPDATE combos SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = $1", [req.params.id]);
+    if (combo.linked_product_id) {
+      await pool.query(`
+        UPDATE products
+        SET active = 0,
+            deleted_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+          AND COALESCE(source_type, 'product') = 'combo'
+          AND deleted_at IS NULL
+      `, [combo.linked_product_id]);
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 async function saveComboItems(comboId, productIds) {
   const ids = String(productIds || "").split(",").map(x => Number(x.trim())).filter(Boolean);
   const client = await pool.connect();

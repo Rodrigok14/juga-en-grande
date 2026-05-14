@@ -187,7 +187,12 @@ function renderCombos() {
       <td>${combo.items.map(item => `${escapeHtml(item.title)} x${item.qty}`).join("<br>") || "-"}</td>
       <td>${money(combo.price)}</td>
       <td><span class="admin-status ${combo.active ? "" : "off"}">${combo.active ? "Activo" : "Oculto"}</span></td>
-      <td><button class="admin-action" data-edit-combo="${combo.id}">Editar</button></td>
+      <td>
+        <div class="admin-row-actions">
+          <button class="admin-action" data-edit-combo="${combo.id}">Editar</button>
+          <button class="admin-action is-danger" data-delete-combo="${combo.id}">Eliminar</button>
+        </div>
+      </td>
     </tr>
   `).join("");
 
@@ -195,6 +200,24 @@ function renderCombos() {
     button.addEventListener("click", () => {
       const combo = state.combos.find(item => item.id === Number(button.dataset.editCombo));
       openComboModal(combo);
+    });
+  });
+
+  $$("[data-delete-combo]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const combo = state.combos.find(item => item.id === Number(button.dataset.deleteCombo));
+      if (!combo) return;
+      const confirmed = window.confirm(`Eliminar el combo "${combo.title}" de la tienda?`);
+      if (!confirmed) return;
+      try {
+        await api(`/api/combos/${combo.id}`, { method: "DELETE" });
+        state.combos = state.combos.filter(item => item.id !== combo.id);
+        renderCombos();
+        await loadProducts();
+        showToast("Combo eliminado");
+      } catch (error) {
+        showToast(error.message);
+      }
     });
   });
 }
