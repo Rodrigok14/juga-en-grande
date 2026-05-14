@@ -83,6 +83,14 @@ function isTucumanShipping(city, country) {
   return normalizedCity.includes("tucuman");
 }
 
+function requestBaseUrl(req) {
+  if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/+$/, "");
+  const host = req.get("x-forwarded-host") || req.get("host");
+  const forwardedProto = req.get("x-forwarded-proto");
+  const proto = forwardedProto || (process.env.VERCEL ? "https" : req.protocol);
+  return `${proto}://${host}`.replace(/\/+$/, "");
+}
+
 async function persistUploadedImage(file) {
   if (!file) return null;
   const contentType = file.mimetype || "application/octet-stream";
@@ -709,8 +717,7 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
 
     const orderId = orderRows[0].id;
 
-    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
-    const isPublicHttpsBaseUrl = /^https:\/\//i.test(baseUrl) && !/localhost|127\.0\.0\.1/i.test(baseUrl);
+    const baseUrl = requestBaseUrl(req);
     const preferenceBody = {
       items: [
         ...items.map(item => item.mp),
@@ -735,10 +742,6 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
       },
       notification_url: `${baseUrl}/api/webhooks/mercadopago`
     };
-
-    if (isPublicHttpsBaseUrl) {
-      preferenceBody.auto_return = "approved";
-    }
 
     const client = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN });
     const preference = new Preference(client);
