@@ -849,6 +849,8 @@ function comboRow(row, items = []) {
     description: row.description,
     image: normalizeImageUrl(row.image),
     active: Boolean(row.active),
+    pillar: row.pillar || "dinero",
+    featured: row.featured !== 0,
     linkedProductId: row.linked_product_id || null,
     digitalFileName: row.digital_file_name || "",
     digitalFilesManifest: parseJsonArray(row.digital_files_manifest).filter(Boolean),
@@ -1249,9 +1251,9 @@ app.post("/api/combos", requireAdmin, upload.single("image"), async (req, res) =
     const image = uploaded || normalizeImageUrl(body.image) || DEFAULT_IMAGE;
     
     const { rows } = await pool.query(`
-      INSERT INTO combos (slug, title, price, description, image, active)
-      VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
-    `, [body.slug, body.title, moneyToCents(body.price), body.description || "", image, body.active === "0" ? 0 : 1]);
+      INSERT INTO combos (slug, title, price, description, image, active, pillar, featured)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id
+    `, [body.slug, body.title, moneyToCents(body.price), body.description || "", image, body.active === "0" ? 0 : 1, body.pillar || "dinero", body.featured === "0" ? 0 : 1]);
     
     const comboId = rows[0].id;
     await saveComboItems(comboId, body.productIds);
@@ -1273,9 +1275,9 @@ app.put("/api/combos/:id", requireAdmin, upload.single("image"), async (req, res
     
     await pool.query(`
       UPDATE combos
-      SET slug=$1, title=$2, price=$3, description=$4, image=$5, active=$6, updated_at=CURRENT_TIMESTAMP
-      WHERE id=$7
-    `, [body.slug, body.title, moneyToCents(body.price), body.description || "", image, body.active === "0" ? 0 : 1, req.params.id]);
+      SET slug=$1, title=$2, price=$3, description=$4, image=$5, active=$6, pillar=$7, featured=$8, updated_at=CURRENT_TIMESTAMP
+      WHERE id=$9
+    `, [body.slug, body.title, moneyToCents(body.price), body.description || "", image, body.active === "0" ? 0 : 1, body.pillar || "dinero", body.featured === "0" ? 0 : 1, req.params.id]);
     
     await saveComboItems(req.params.id, body.productIds);
     await rebuildComboDigitalPack(req.params.id, { required: true });
@@ -1389,7 +1391,7 @@ async function syncComboProduct(comboId, combo) {
     slug,
     title,
     "Pack digital",
-    "negocios",
+    combo.pillar || "dinero",
     Number(combo.price || 0),
     normalizeText(combo.description),
     normalizeImageUrl(combo.image),
@@ -1631,6 +1633,8 @@ app.get("/js/data.js", async (_req, res) => {
       digitalFilesManifest: parseJsonArray(row.digital_files_manifest).filter(Boolean),
       hasPreview: Boolean(row.preview_file_url),
       previewUrl: row.preview_file_url ? `/api/products/${row.id}/preview` : "",
+      sourceType: row.source_type || "product",
+      sourceRefId: row.source_ref_id || null,
       pages: 240,
       language: "Español",
       featured: true,
@@ -1640,6 +1644,10 @@ app.get("/js/data.js", async (_req, res) => {
     }));
 
     const categories = [
+      { id: "educacion-financiera", name: "Educación financiera", icon: "$", count: "Activos e inversión", color: "#00FF88" },
+      { id: "crecimiento-personal", name: "Crecimiento personal", icon: "C", count: "Hábitos y mentalidad", color: "#D4AF37" },
+      { id: "dinero", name: "Dinero", icon: "$", count: "Ingresos y negocio", color: "#58D7FF" },
+      { id: "amor", name: "Amor", icon: "A", count: "Relaciones y autoestima", color: "#FF6FAE" },
       { id: "negocios", name: "Dinero", icon: "$", count: 756, color: "#00FF88" },
       { id: "desarrollo", name: "Mentalidad", icon: "M", count: 1102, color: "#D4AF37" },
       { id: "ventas", name: "Ventas", icon: "V", count: 420, color: "#58D7FF" },

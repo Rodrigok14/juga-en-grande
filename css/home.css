@@ -183,6 +183,79 @@
   position: relative;
   z-index: 1;
 }
+.packs-section {
+  background:
+    radial-gradient(circle at 12% 0%, rgba(0,255,136,.12), transparent 28%),
+    linear-gradient(180deg, #0a0d0b, #101412);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.pillar-tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 22px;
+}
+.pillar-tab {
+  padding: 10px 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 999px;
+  color: var(--color-text-2);
+  background: rgba(255,255,255,.04);
+  font-weight: 900;
+}
+.pillar-tab.active,
+.pillar-tab:hover {
+  border-color: rgba(0,255,136,.5);
+  background: rgba(0,255,136,.13);
+  color: var(--color-accent);
+}
+.empty-packs {
+  margin-top: 12px;
+  padding: 22px;
+  border: 1px dashed rgba(0,255,136,.32);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-2);
+  background: rgba(0,255,136,.06);
+}
+.empty-packs strong,
+.empty-packs span,
+.empty-packs a { display: block; }
+.empty-packs strong { color: var(--color-text); font-size: 1.05rem; }
+.empty-packs a { margin-top: 10px; color: var(--color-accent); font-weight: 900; }
+.purchases-page { min-height: 100vh; background: #0b0b0b; }
+.purchases-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 460px);
+  gap: 34px;
+  align-items: center;
+}
+.purchases-card {
+  border: 1px solid rgba(0,255,136,.2);
+  box-shadow: var(--shadow-lg), 0 0 34px rgba(0,255,136,.08);
+}
+.purchases-results {
+  display: grid;
+  gap: 14px;
+}
+.purchase-download-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.026));
+}
+.purchase-download-card span {
+  color: var(--color-accent);
+  font-size: .78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.purchase-download-card h3 { margin: 5px 0; }
+.purchase-download-card p { color: var(--color-text-2); }
 .transformation {
   background: linear-gradient(180deg, #0b0b0b, #101412);
   border-top: 1px solid rgba(255,255,255,.08);
@@ -624,7 +697,8 @@
   .interactive-layout,
   .reading-preview-layout,
   .support-layout,
-  .request-layout { grid-template-columns: 1fr; }
+  .request-layout,
+  .purchases-layout { grid-template-columns: 1fr; }
   .request-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 900px) {
@@ -646,4 +720,5 @@
   .mentor-card { right: 0; }
   .preview-modal-dialog { width: calc(100vw - 16px); height: 88vh; margin-top: 4vh; padding: 14px; }
   .preview-modal-frame { height: calc(100% - 104px); }
+  .purchase-download-card { align-items: flex-start; flex-direction: column; }
 }

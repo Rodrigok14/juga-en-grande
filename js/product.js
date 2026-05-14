@@ -50,6 +50,32 @@
   const supportHtml = isDigital
     ? `<div class="trust-point"><span>📩</span> Descarga por web y por email</div>`
     : `<div class="trust-point"><span>📍</span> Entrega solo en San Miguel de Tucumán</div>`;
+  const includedFiles = Array.isArray(book.digitalFilesManifest) ? book.digitalFilesManifest : [];
+  const isPack = book.sourceType === "combo" || includedFiles.length > 1;
+  const includedHtml = isDigital
+    ? `
+      <div class="product-included product-details">
+        <h3 class="details-title">${isPack ? "Qué incluye este pack" : "Qué recibís al comprar"}</h3>
+        <div class="included-summary">
+          <strong>${isPack ? `${includedFiles.length || 1} archivo(s) digitales en ZIP` : "Archivo digital listo para descargar"}</strong>
+          <span>Después del pago aprobado, podés descargar desde la web y también recibís el acceso por email.</span>
+        </div>
+        ${includedFiles.length ? `
+          <ul class="included-list">
+            ${includedFiles.slice(0, 12).map(file => `<li>${file.split("/").pop()}</li>`).join("")}
+          </ul>
+        ` : ""}
+      </div>
+    `
+    : `
+      <div class="product-included product-details">
+        <h3 class="details-title">Entrega física</h3>
+        <div class="included-summary">
+          <strong>Disponible solo en San Miguel de Tucumán</strong>
+          <span>Coordinamos la entrega por WhatsApp después de confirmar el pedido.</span>
+        </div>
+      </div>
+    `;
 
   const previewHtml = book.hasPreview
     ? `
@@ -142,6 +168,7 @@
         </div>
 
         ${previewHtml}
+        ${includedHtml}
 
         <div class="product-synopsis product-details">
           <h3 class="details-title">Sinopsis</h3>
@@ -151,10 +178,10 @@
 
         <div class="product-benefits">
           <h4>✨ ¿Por qué este libro?</h4>
-          <div class="benefit-item"><span class="benefit-icon">🎯</span><span>Conocimiento práctico y aplicable desde el primer capítulo.</span></div>
-          <div class="benefit-item"><span class="benefit-icon">🧠</span><span>Transforma tu forma de pensar con perspectivas comprobadas.</span></div>
-          <div class="benefit-item"><span class="benefit-icon">⭐</span><span>Más de ${book.reviews.toLocaleString()} lectores lo recomiendan.</span></div>
-          <div class="benefit-item"><span class="benefit-icon">📖</span><span>${isDigital ? "Se entrega en formato digital con descarga" : "Edición física lista para entrega local"}.</span></div>
+          <div class="benefit-item"><span class="benefit-icon">🎯</span><span>Elegido para avanzar en ${categoryName.toLowerCase()} con una lectura concreta.</span></div>
+          <div class="benefit-item"><span class="benefit-icon">⚡</span><span>${isDigital ? "Pagás y accedés al material cuando el proveedor confirma el pago." : "Ideal si estás en Tucumán y querés el libro impreso."}</span></div>
+          <div class="benefit-item"><span class="benefit-icon">⭐</span><span>Más de ${book.reviews.toLocaleString()} lectores lo tienen como referencia.</span></div>
+          <div class="benefit-item"><span class="benefit-icon">💬</span><span>Si tenés problemas para descargar, soporte directo por WhatsApp.</span></div>
         </div>
 
         <div class="product-details">

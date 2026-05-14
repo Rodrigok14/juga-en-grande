@@ -242,7 +242,11 @@ document.addEventListener("DOMContentLoaded", () => {
           <a class="btn btn-primary btn-full" href="/api/orders/access/${orderData.id}/download/${item.id}?token=${encodeURIComponent(token)}">
             Descargar ${item.title}
           </a>
-        `).join("") || "<p>No hay archivos disponibles todavia.</p>";
+        `).join("") + `
+          <a class="btn btn-secondary btn-full" href="mis-compras.html?order_id=${encodeURIComponent(orderData.id)}&token=${encodeURIComponent(token)}">
+            Abrir Mis compras
+          </a>
+        ` || "<p>No hay archivos disponibles todavia.</p>";
       }
       return;
     }

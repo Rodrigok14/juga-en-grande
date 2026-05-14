@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mis compras | Jugá en Grande</title>
+  <meta name="description" content="Accedé a tus compras digitales de Jugá en Grande con tu número de pedido y código de acceso." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="icon" type="image/svg+xml" href="assets/logo-mark.svg" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/home.css" />
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-container">
+      <a href="index.html" class="logo" aria-label="Jugá en Grande">
+        <img src="assets/logo-mark.svg" alt="" class="logo-mark" />
+        <span class="logo-text">Jugá en <strong>Grande</strong></span>
+      </a>
+      <div class="nav-actions">
+        <a href="index.html#digital-packs" class="nav-link">Packs</a>
+        <a href="catalogo.html" class="nav-link">Catálogo</a>
+        <a href="mis-compras.html" class="nav-link">Mis compras</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="purchases-page">
+    <section class="section-padding section-first">
+      <div class="container purchases-layout">
+        <div>
+          <div class="section-label">Biblioteca digital</div>
+          <h1 class="section-title">Mis compras</h1>
+          <p class="section-subtitle">Ingresá el número de pedido y el código de acceso que recibiste después de pagar. Si el pago está aprobado, vas a poder descargar tus libros digitales.</p>
+          <div class="hero-delivery-note">
+            <strong>Importante:</strong> el código de acceso viene en el link de descarga del email o en la pantalla final de checkout.
+            <span>Si no lo encontrás, escribinos por WhatsApp y te ayudamos.</span>
+          </div>
+        </div>
+        <form class="request-form purchases-card" id="purchases-form">
+          <label>
+            Número de pedido
+            <input type="number" id="purchase-order-id" placeholder="Ej: 31" required />
+          </label>
+          <label>
+            Código de acceso
+            <input type="text" id="purchase-token" placeholder="Pegá aquí tu código" required />
+          </label>
+          <button class="btn btn-primary btn-full" type="submit">Ver mis descargas</button>
+          <p class="request-feedback" id="purchases-feedback">Tus descargas aparecen acá cuando el pago figura aprobado.</p>
+        </form>
+      </div>
+    </section>
+
+    <section class="section-padding">
+      <div class="container">
+        <div class="section-header-row">
+          <div>
+            <div class="section-label">Descargas</div>
+            <h2 class="section-title">Productos disponibles</h2>
+          </div>
+          <a class="see-all-link" href="https://wa.me/543816590235?text=Hola,%20necesito%20ayuda%20con%20mi%20compra%20digital" target="_blank" rel="noopener noreferrer">Necesito ayuda</a>
+        </div>
+        <div class="purchases-results" id="purchases-results">
+          <div class="empty-packs">
+            <strong>Todavía no cargaste un pedido.</strong>
+            <span>Completá el formulario para ver tus libros o packs digitales.</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/my-purchases.js"></script>
+</body>
+</html>

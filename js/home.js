@@ -66,10 +66,10 @@
   }
 
   const categories = [
-    { id: "negocios", name: "Dinero", code: "$", count: "Finanzas y activos", color: "#00FF88" },
-    { id: "desarrollo", name: "Mentalidad", code: "M", count: "Hábitos y decisión", color: "#D4AF37" },
-    { id: "ventas", name: "Ventas", code: "V", count: "Persuasión y negocio", color: "#58D7FF" },
-    { id: "productividad", name: "Productividad", code: "P", count: "Foco y ejecución", color: "#FFFFFF" }
+    { id: "educacion-financiera", name: "Educación financiera", code: "$", count: "Activos e inversión", color: "#00FF88" },
+    { id: "crecimiento-personal", name: "Crecimiento personal", code: "C", count: "Hábitos y mentalidad", color: "#D4AF37" },
+    { id: "dinero", name: "Dinero", code: "$", count: "Ingresos y negocio", color: "#58D7FF" },
+    { id: "amor", name: "Amor", code: "A", count: "Relaciones y autoestima", color: "#FF6FAE" }
   ];
 
   const categoryGrid = document.getElementById("categories-grid");
@@ -89,6 +89,10 @@
     return ({
       negocios: "Dinero",
       desarrollo: "Mentalidad",
+      "educacion-financiera": "Educación financiera",
+      "crecimiento-personal": "Crecimiento personal",
+      dinero: "Dinero",
+      amor: "Amor",
       ventas: "Ventas",
       productividad: "Productividad",
       noficcion: "Conocimiento",
@@ -191,18 +195,64 @@
     featuredGrid.innerHTML = books.map(bookCardHTML).join("");
   }
 
+  const packGrid = document.getElementById("digital-packs-grid");
+  const tabs = document.getElementById("pillar-tabs");
+  const emptyPacks = document.getElementById("empty-packs");
+  const pillars = [
+    ["todos", "Todos"],
+    ["educacion-financiera", "Educación financiera"],
+    ["crecimiento-personal", "Crecimiento personal"],
+    ["dinero", "Dinero"],
+    ["amor", "Amor"]
+  ];
+
+  function renderPacks(active = "todos") {
+    if (!packGrid) return;
+    const packs = BOOKS
+      .filter(book => book.sourceType === "combo" && book.format === "digital")
+      .filter(book => active === "todos" || book.category === active);
+    packGrid.innerHTML = packs.slice(0, 8).map(bookCardHTML).join("");
+    if (emptyPacks) emptyPacks.hidden = packs.length > 0;
+  }
+
+  if (tabs && packGrid) {
+    tabs.innerHTML = pillars.map(([id, label], index) => `
+      <button class="pillar-tab ${index === 0 ? "active" : ""}" data-pillar="${id}">${label}</button>
+    `).join("");
+    tabs.querySelectorAll("[data-pillar]").forEach(button => {
+      button.addEventListener("click", () => {
+        tabs.querySelectorAll(".pillar-tab").forEach(item => item.classList.remove("active"));
+        button.classList.add("active");
+        renderPacks(button.dataset.pillar);
+      });
+    });
+    renderPacks();
+  }
+
   const recommendations = [
     {
-      keys: ["dinero", "ganar", "finanza", "invertir", "activo", "plata"],
+      keys: ["educacion financiera", "finanza", "invertir", "activo", "ahorrar", "libertad financiera"],
       title: "Padre Rico, Padre Pobre",
       slug: "padre-rico-padre-pobre",
       body: "Para ordenar tu mentalidad financiera y empezar a mirar el dinero como sistema."
     },
     {
-      keys: ["mentalidad", "confianza", "exito", "éxito", "crecer", "ambicion"],
+      keys: ["crecimiento", "mentalidad", "confianza", "exito", "éxito", "crecer", "ambicion"],
       title: "Piense y Hágase Rico",
       slug: "piense-y-hagase-rico",
       body: "Para trabajar deseo, enfoque y persistencia con una lógica orientada a resultados."
+    },
+    {
+      keys: ["dinero", "ganar", "ingresos", "negocio", "plata"],
+      title: "Pack digital de dinero",
+      slug: (BOOKS.find(book => book.sourceType === "combo" && book.category === "dinero") || getBookBySlug("padre-rico-padre-pobre"))?.slug,
+      body: "Para ordenar ideas y tomar mejores decisiones con tus ingresos."
+    },
+    {
+      keys: ["amor", "pareja", "relacion", "relación", "autoestima", "vinculo", "vínculo"],
+      title: "Lecturas para relaciones y autoestima",
+      slug: (BOOKS.find(book => book.sourceType === "combo" && book.category === "amor") || getBookBySlug("atomic-habits"))?.slug,
+      body: "Para trabajar vínculos, autoestima y decisiones emocionales con más claridad."
     },
     {
       keys: ["habito", "hábito", "disciplina", "constancia", "rutina"],
@@ -236,7 +286,7 @@
       <span>Recomendación para tu objetivo</span>
       <h3>${match.title}</h3>
       <p>${match.body}</p>
-      <a href="producto.html?slug=${match.slug}">Ver libro</a>
+      <a href="producto.html?slug=${match.slug}">Ver recomendación</a>
     `;
     recommendationCard.animate([
       { transform: "translateY(8px)", opacity: .75 },

@@ -170,6 +170,7 @@ function renderProducts() {
 }
 
 function renderCombos() {
+  renderPackAlerts();
   $("#combos-table").innerHTML = state.combos.map(combo => `
     <tr>
       <td>
@@ -182,6 +183,7 @@ function renderCombos() {
           </div>
         </div>
       </td>
+      <td><span class="admin-status">${pillarName(combo.pillar)}</span></td>
       <td>${combo.items.map(item => `${escapeHtml(item.title)} x${item.qty}`).join("<br>") || "-"}</td>
       <td>${money(combo.price)}</td>
       <td><span class="admin-status ${combo.active ? "" : "off"}">${combo.active ? "Activo" : "Oculto"}</span></td>
@@ -286,6 +288,8 @@ function openComboModal(combo = null) {
   $("#combo-title").value = combo?.title || "";
   $("#combo-slug").value = combo?.slug || "";
   $("#combo-price").value = combo?.price || "";
+  $("#combo-pillar").value = combo?.pillar || "dinero";
+  $("#combo-featured").value = combo?.featured === false ? "0" : "1";
   $("#combo-active").value = combo?.active === false ? "0" : "1";
   $("#combo-description").value = combo?.description || "";
   renderComboProductOptions(combo?.items?.map(item => item.id) || []);
@@ -337,6 +341,8 @@ async function saveCombo(event) {
   form.set("title", $("#combo-title").value.trim());
   form.set("slug", $("#combo-slug").value.trim());
   form.set("price", $("#combo-price").value);
+  form.set("pillar", $("#combo-pillar").value);
+  form.set("featured", $("#combo-featured").value);
   form.set("active", $("#combo-active").value);
   form.set("description", $("#combo-description").value.trim());
   const productIds = [...$("#combo-products").selectedOptions].map(option => option.value);
@@ -368,7 +374,43 @@ function money(value) {
 }
 
 function categoryName(value) {
-  return ({ negocios: "Dinero", desarrollo: "Mentalidad", ventas: "Ventas", productividad: "Productividad", noficcion: "Conocimiento" })[value] || value;
+  return ({
+    "educacion-financiera": "Educación financiera",
+    "crecimiento-personal": "Crecimiento personal",
+    dinero: "Dinero",
+    amor: "Amor",
+    negocios: "Dinero",
+    desarrollo: "Mentalidad",
+    ventas: "Ventas",
+    productividad: "Productividad",
+    noficcion: "Conocimiento"
+  })[value] || value;
+}
+
+function pillarName(value) {
+  return categoryName(value);
+}
+
+function renderPackAlerts() {
+  const container = $("#pack-alerts");
+  if (!container) return;
+  const pillars = [
+    ["educacion-financiera", "Educación financiera"],
+    ["crecimiento-personal", "Crecimiento personal"],
+    ["dinero", "Dinero"],
+    ["amor", "Amor"]
+  ];
+  const activeCombos = state.combos.filter(combo => combo.active && combo.hasDigitalPack);
+  container.innerHTML = pillars.map(([id, label]) => {
+    const count = activeCombos.filter(combo => combo.pillar === id).length;
+    return `
+      <div class="admin-pack-alert ${count ? "is-ok" : "is-missing"}">
+        <strong>${count ? "Listo" : "Falta pack"}</strong>
+        <span>${label}</span>
+        <small>${count ? `${count} pack(s) activos en la tienda` : `Armá al menos 1 pack para que este pilar aparezca fuerte en la home`}</small>
+      </div>
+    `;
+  }).join("");
 }
 
 function escapeHtml(value = "") {

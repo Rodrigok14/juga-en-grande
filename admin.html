@@ -83,15 +83,17 @@
           <div class="admin-panel-head">
             <div>
               <h2>Combos</h2>
-              <p>Arma paquetes con precio especial.</p>
+              <p>Armá packs digitales por pilar. El sistema genera el ZIP automáticamente.</p>
             </div>
             <button class="btn btn-primary" id="new-combo-btn">Nuevo combo</button>
           </div>
+          <div class="admin-pack-alerts" id="pack-alerts"></div>
           <div class="admin-table-wrap">
             <table class="admin-table">
               <thead>
                 <tr>
                   <th>Combo</th>
+                  <th>Pilar</th>
                   <th>Incluye</th>
                   <th>Precio</th>
                   <th>Estado</th>
@@ -192,6 +194,10 @@
           <select id="product-category" name="category">
             <option value="negocios">Dinero</option>
             <option value="desarrollo">Mentalidad</option>
+            <option value="educacion-financiera">Educación financiera</option>
+            <option value="crecimiento-personal">Crecimiento personal</option>
+            <option value="dinero">Dinero</option>
+            <option value="amor">Amor</option>
             <option value="ventas">Ventas</option>
             <option value="productividad">Productividad</option>
             <option value="noficcion">Conocimiento</option>
@@ -238,10 +244,24 @@
         <label>Titulo<input id="combo-title" name="title" required /></label>
         <label>Slug<input id="combo-slug" name="slug" required /></label>
         <label>Precio final<input id="combo-price" name="price" type="number" min="0" step="0.01" required /></label>
+        <label>Pilar del pack
+          <select id="combo-pillar" name="pillar">
+            <option value="educacion-financiera">Educación financiera</option>
+            <option value="crecimiento-personal">Crecimiento personal</option>
+            <option value="dinero">Dinero</option>
+            <option value="amor">Amor</option>
+          </select>
+        </label>
         <label>Estado
           <select id="combo-active" name="active">
             <option value="1">Activo</option>
             <option value="0">Oculto</option>
+          </select>
+        </label>
+        <label>Mostrar destacado en la home
+          <select id="combo-featured" name="featured">
+            <option value="1">Sí, destacarlo</option>
+            <option value="0">No destacar</option>
           </select>
         </label>
         <label>Foto<input id="combo-image" name="image" type="file" accept="image/*" /></label>
