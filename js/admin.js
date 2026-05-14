@@ -56,7 +56,6 @@ function bindTabs() {
 }
 
 function bindModals() {
-  $("[data-close-modal]")?.addEventListener("click", closeModals);
   $$("[data-close-modal]").forEach(button => button.addEventListener("click", closeModals));
 
   $("#new-product-btn")?.addEventListener("click", () => openProductModal());
@@ -103,11 +102,14 @@ function renderProducts() {
           <div>
             <strong>${escapeHtml(product.title)}</strong>
             <div class="admin-muted">${escapeHtml(product.author || "")}</div>
+            ${product.hasDigitalFile ? `<div class="admin-muted">Archivo digital cargado</div>` : ""}
           </div>
         </div>
       </td>
+      <td>${product.format === "digital" ? "Digital" : "Fisico"}</td>
       <td>${categoryName(product.category)}</td>
       <td>${money(product.price)}</td>
+      <td>${product.displayOrder ?? 0}</td>
       <td>${product.stock}</td>
       <td><span class="admin-status ${product.active ? "" : "off"}">${product.active ? "Activo" : "Oculto"}</span></td>
       <td>
@@ -165,7 +167,7 @@ function renderOrders() {
       <td><span class="admin-status">${escapeHtml(order.status)}</span></td>
       <td>${new Date(order.created_at).toLocaleString("es-AR")}</td>
     </tr>
-  `).join("") || `<tr><td colspan="5" class="admin-muted">Todavía no hay pedidos.</td></tr>`;
+  `).join("") || `<tr><td colspan="5" class="admin-muted">Todavia no hay pedidos.</td></tr>`;
 }
 
 function openProductModal(product = null) {
@@ -178,10 +180,14 @@ function openProductModal(product = null) {
   $("#product-category").value = product?.category || "negocios";
   $("#product-price").value = product?.price || "";
   $("#product-old-price").value = product?.oldPrice || "";
+  $("#product-display-order").value = product?.displayOrder ?? 0;
   $("#product-format").value = product?.format || "fisico";
   $("#product-stock").value = product?.stock ?? 0;
   $("#product-active").value = product?.active === false ? "0" : "1";
   $("#product-description").value = product?.description || product?.synopsis || "";
+  $("#product-digital-file-status").textContent = product?.digitalFileName
+    ? `Archivo actual: ${product.digitalFileName}`
+    : "Sin archivo digital cargado.";
   $("#product-modal").showModal();
 }
 
@@ -216,11 +222,13 @@ async function saveProduct(event) {
   form.set("category", $("#product-category").value);
   form.set("price", $("#product-price").value);
   form.set("oldPrice", $("#product-old-price").value);
+  form.set("displayOrder", $("#product-display-order").value);
   form.set("format", $("#product-format").value);
   form.set("stock", $("#product-stock").value);
   form.set("active", $("#product-active").value);
   form.set("description", $("#product-description").value.trim());
   if ($("#product-image").files[0]) form.set("image", $("#product-image").files[0]);
+  if ($("#product-digital-file").files[0]) form.set("digitalFile", $("#product-digital-file").files[0]);
   await api(id ? `/api/products/${id}` : "/api/products", { method: id ? "PUT" : "POST", body: form });
   closeModals();
   await loadProducts();

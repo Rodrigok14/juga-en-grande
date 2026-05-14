@@ -26,7 +26,9 @@ const Cart = (() => {
     } else {
       state.items.push({
         id: book.id, title: book.title, author: book.author,
-        price: book.price, cover: book.cover, slug: book.slug, qty
+        price: book.price, cover: book.cover, slug: book.slug, qty,
+        format: book.format,
+        hasDigitalFile: Boolean(book.hasDigitalFile)
       });
     }
     save(state.items);

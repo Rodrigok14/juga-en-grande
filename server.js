@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const express = require("express");
 const multer = require("multer");
 const { put } = require("@vercel/blob");
@@ -12,11 +13,13 @@ const { createSession, readSession, requireAdmin, verifyAdmin, isProduction } = 
 const app = express();
 const root = __dirname;
 const isVercel = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
-const uploadsDir = isVercel ? "/tmp" : path.join(root, "assets", "uploads");
+const publicUploadsDir = isVercel ? "/tmp" : path.join(root, "assets", "uploads");
+const privateDigitalDir = isVercel ? "/tmp" : path.join(root, "storage", "digital");
 const DEFAULT_IMAGE = "/assets/images/book_placeholder.svg";
 
 try {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+  fs.mkdirSync(publicUploadsDir, { recursive: true });
+  fs.mkdirSync(privateDigitalDir, { recursive: true });
 } catch (e) {}
 
 function safeUploadFilename(originalname = "image") {
@@ -26,10 +29,12 @@ function safeUploadFilename(originalname = "image") {
 
 const upload = multer({
   storage: isVercel ? multer.memoryStorage() : multer.diskStorage({
-    destination: uploadsDir,
+    destination: (_req, file, cb) => {
+      cb(null, file.fieldname === "digitalFile" ? privateDigitalDir : publicUploadsDir);
+    },
     filename: (_req, file, cb) => cb(null, safeUploadFilename(file.originalname))
   }),
-  limits: { fileSize: 4 * 1024 * 1024 }
+  limits: { fileSize: 25 * 1024 * 1024 }
 });
 
 app.use(express.json({ limit: "1mb" }));
@@ -40,6 +45,42 @@ function normalizeImageUrl(value) {
   if (!v) return DEFAULT_IMAGE;
   if (/^https?:\/\//i.test(v) || v.startsWith("data:")) return v;
   return v.startsWith("/") ? v : `/${v}`;
+}
+
+function uploadedFile(req, fieldname) {
+  if (Array.isArray(req.files?.[fieldname])) return req.files[fieldname][0] || null;
+  return null;
+}
+
+function normalizeFormat(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "físico" || raw === "fisico" || raw === "physical") return "fisico";
+  if (raw === "digital") return "digital";
+  return raw || "fisico";
+}
+
+function makeAccessToken() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+function normalizeText(value) {
+  return String(value || "").trim();
+}
+
+function normalizeSearchText(value) {
+  return normalizeText(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function isTucumanShipping(city, country) {
+  const normalizedCity = normalizeSearchText(city);
+  const normalizedCountry = normalizeSearchText(country);
+  if (normalizedCountry && normalizedCountry !== "ar" && normalizedCountry !== "argentina") {
+    return false;
+  }
+  return normalizedCity.includes("tucuman");
 }
 
 async function persistUploadedImage(file) {
@@ -67,8 +108,39 @@ async function persistUploadedImage(file) {
   return `/assets/uploads/${file.filename}`;
 }
 
-function productRow(row) {
+async function persistUploadedDigitalFile(file) {
+  if (!file) return null;
+  const contentType = file.mimetype || "application/octet-stream";
+  const extension = path.extname(file.originalname || "").toLowerCase();
+  const allowedExtensions = new Set([".pdf", ".zip"]);
+  const looksLikePdf = contentType === "application/pdf";
+  const looksLikeZip = contentType === "application/zip" || contentType === "application/x-zip-compressed";
+
+  if (!allowedExtensions.has(extension) && !looksLikePdf && !looksLikeZip) {
+    throw new Error("El archivo digital debe ser PDF o ZIP");
+  }
+
+  if (isVercel) {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      throw new Error("Falta configurar BLOB_READ_WRITE_TOKEN para guardar archivos digitales");
+    }
+    const filename = safeUploadFilename(file.originalname);
+    const blob = await put(`digital-products/${filename}`, file.buffer, {
+      access: "public",
+      contentType,
+      token: process.env.BLOB_READ_WRITE_TOKEN
+    });
+    return { url: blob.url, name: file.originalname || filename };
+  }
+
   return {
+    url: path.join(privateDigitalDir, file.filename),
+    name: file.originalname || file.filename
+  };
+}
+
+function productRow(row, options = {}) {
+  const item = {
     id: row.id,
     slug: row.slug,
     title: row.title,
@@ -78,12 +150,21 @@ function productRow(row) {
     oldPrice: row.old_price == null ? null : centsToAmount(row.old_price),
     format: row.format,
     stock: row.stock,
+    displayOrder: Number(row.display_order || 0),
     cover: normalizeImageUrl(row.image),
     image: normalizeImageUrl(row.image),
     synopsis: row.description,
     description: row.description,
+    hasDigitalFile: Boolean(row.digital_file_url),
     active: Boolean(row.active)
   };
+
+  if (options.includePrivate) {
+    item.digitalFileName = row.digital_file_name || "";
+    item.digitalFileUrl = row.digital_file_url || "";
+  }
+
+  return item;
 }
 
 function comboRow(row, items = []) {
@@ -97,6 +178,48 @@ function comboRow(row, items = []) {
     active: Boolean(row.active),
     items
   };
+}
+
+function orderRow(row) {
+  return {
+    ...row,
+    total: centsToAmount(row.total),
+    items: JSON.parse(row.items_json || "[]")
+  };
+}
+
+async function loadOrderWithToken(orderId, accessToken) {
+  const { rows } = await pool.query(
+    "SELECT * FROM orders WHERE id = $1 AND access_token = $2",
+    [orderId, accessToken]
+  );
+  return rows[0] || null;
+}
+
+async function listDigitalOrderItems(order) {
+  const items = JSON.parse(order.items_json || "[]");
+  const digitalIds = items
+    .filter(item => normalizeFormat(item.format) === "digital")
+    .map(item => Number(item.id))
+    .filter(Boolean);
+
+  if (digitalIds.length === 0) return [];
+
+  const { rows } = await pool.query(
+    `SELECT id, title, digital_file_url, digital_file_name
+     FROM products
+     WHERE id = ANY($1::int[]) AND active = 1`,
+    [digitalIds]
+  );
+
+  return rows
+    .filter(row => row.digital_file_url)
+    .map(row => ({
+      id: row.id,
+      title: row.title,
+      fileName: row.digital_file_name || `${row.title}.pdf`,
+      hasFile: Boolean(row.digital_file_url)
+    }));
 }
 
 app.get("/api/health", (_req, res) => {
@@ -131,9 +254,14 @@ app.get("/api/auth/me", (req, res) => {
 
 app.get("/api/products", async (req, res) => {
   try {
-    const includeInactive = req.query.all === "1" && readSession(req);
-    const { rows } = await pool.query(`SELECT * FROM products ${includeInactive ? "" : "WHERE active = 1"} ORDER BY id DESC`);
-    res.json({ products: rows.map(productRow) });
+    const adminSession = readSession(req);
+    const includeInactive = req.query.all === "1" && adminSession;
+    const { rows } = await pool.query(`
+      SELECT * FROM products
+      ${includeInactive ? "" : "WHERE active = 1"}
+      ORDER BY display_order ASC, CASE WHEN format = 'digital' THEN 0 ELSE 1 END, id DESC
+    `);
+    res.json({ products: rows.map(row => productRow(row, { includePrivate: Boolean(adminSession) })) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -149,14 +277,31 @@ app.get("/api/products/:id", async (req, res) => {
   }
 });
 
-app.post("/api/products", requireAdmin, upload.single("image"), async (req, res) => {
+const productUpload = upload.fields([
+  { name: "image", maxCount: 1 },
+  { name: "digitalFile", maxCount: 1 }
+]);
+
+app.post("/api/products", requireAdmin, productUpload, async (req, res) => {
   try {
     const body = req.body;
-    const uploaded = await persistUploadedImage(req.file);
+    const format = body.format || "fisico";
+    const imageFile = uploadedFile(req, "image");
+    const digitalFile = uploadedFile(req, "digitalFile");
+    const uploaded = await persistUploadedImage(imageFile);
+    const uploadedDigital = await persistUploadedDigitalFile(digitalFile);
     const image = uploaded || normalizeImageUrl(body.image) || DEFAULT_IMAGE;
+    if (format === "digital" && !uploadedDigital) {
+      return res.status(400).json({ error: "Los productos digitales deben incluir un PDF o ZIP" });
+    }
+    const digitalFileUrl = format === "digital" ? uploadedDigital?.url || null : null;
+    const digitalFileName = format === "digital" ? uploadedDigital?.name || null : null;
     const { rows } = await pool.query(`
-      INSERT INTO products (slug, title, author, category, price, old_price, format, stock, image, description, active)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id
+      INSERT INTO products (
+        slug, title, author, category, price, old_price, format, stock, image, description,
+        active, display_order, digital_file_url, digital_file_name
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id
     `, [
       body.slug,
       body.title,
@@ -164,11 +309,14 @@ app.post("/api/products", requireAdmin, upload.single("image"), async (req, res)
       body.category || "negocios",
       moneyToCents(body.price),
       body.oldPrice ? moneyToCents(body.oldPrice) : null,
-      body.format || "fisico",
+      format,
       Number(body.stock || 0),
       image,
       body.description || "",
-      body.active === "0" ? 0 : 1
+      body.active === "0" ? 0 : 1,
+      Number(body.displayOrder || 0),
+      digitalFileUrl,
+      digitalFileName
     ]);
     res.status(201).json({ ok: true, id: rows[0].id });
   } catch (err) {
@@ -176,21 +324,36 @@ app.post("/api/products", requireAdmin, upload.single("image"), async (req, res)
   }
 });
 
-app.put("/api/products/:id", requireAdmin, upload.single("image"), async (req, res) => {
+app.put("/api/products/:id", requireAdmin, productUpload, async (req, res) => {
   try {
     const { rows: existingRows } = await pool.query("SELECT * FROM products WHERE id = $1", [req.params.id]);
     if (existingRows.length === 0) return res.status(404).json({ error: "Producto no encontrado" });
     
     const body = req.body;
-    const uploaded = await persistUploadedImage(req.file);
+    const format = body.format || "fisico";
+    const imageFile = uploadedFile(req, "image");
+    const digitalFile = uploadedFile(req, "digitalFile");
+    const uploaded = await persistUploadedImage(imageFile);
+    const uploadedDigital = await persistUploadedDigitalFile(digitalFile);
     const image = uploaded || normalizeImageUrl(body.image || existingRows[0].image);
+    const digitalFileUrl = format === "digital"
+      ? (uploadedDigital?.url || existingRows[0].digital_file_url || null)
+      : null;
+    const digitalFileName = format === "digital"
+      ? (uploadedDigital?.name || existingRows[0].digital_file_name || null)
+      : null;
+
+    if (format === "digital" && !digitalFileUrl) {
+      return res.status(400).json({ error: "Los productos digitales deben incluir un PDF o ZIP" });
+    }
     
     await pool.query(`
       UPDATE products
       SET slug=$1, title=$2, author=$3, category=$4, price=$5, old_price=$6,
           format=$7, stock=$8, image=$9, description=$10, active=$11,
+          display_order=$12, digital_file_url=$13, digital_file_name=$14,
           updated_at=CURRENT_TIMESTAMP
-      WHERE id=$12
+      WHERE id=$15
     `, [
       body.slug,
       body.title,
@@ -198,11 +361,14 @@ app.put("/api/products/:id", requireAdmin, upload.single("image"), async (req, r
       body.category || "negocios",
       moneyToCents(body.price),
       body.oldPrice ? moneyToCents(body.oldPrice) : null,
-      body.format || "fisico",
+      format,
       Number(body.stock || 0),
       image,
       body.description || "",
       body.active === "0" ? 0 : 1,
+      Number(body.displayOrder || 0),
+      digitalFileUrl,
+      digitalFileName,
       req.params.id
     ]);
     res.json({ ok: true });
@@ -301,10 +467,78 @@ async function saveComboItems(comboId, productIds) {
   }
 }
 
+app.get("/api/orders/access/:id", async (req, res) => {
+  try {
+    const accessToken = String(req.query.token || "");
+    if (!accessToken) return res.status(400).json({ error: "Falta token de acceso" });
+
+    const order = await loadOrderWithToken(req.params.id, accessToken);
+    if (!order) return res.status(404).json({ error: "Pedido no encontrado" });
+
+    const response = {
+      id: order.id,
+      status: order.status,
+      deliveryType: order.delivery_type,
+      buyerName: order.buyer_name || "",
+      buyerEmail: order.buyer_email || ""
+    };
+
+    if (order.status === "approved" && order.delivery_type === "digital") {
+      response.downloads = await listDigitalOrderItems(order);
+    }
+
+    res.json(response);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/orders/access/:id/download/:productId", async (req, res) => {
+  try {
+    const accessToken = String(req.query.token || "");
+    if (!accessToken) return res.status(400).json({ error: "Falta token de acceso" });
+
+    const order = await loadOrderWithToken(req.params.id, accessToken);
+    if (!order) return res.status(404).json({ error: "Pedido no encontrado" });
+    if (order.status !== "approved") return res.status(403).json({ error: "El pago aun no fue aprobado" });
+    if (order.delivery_type !== "digital") return res.status(400).json({ error: "Este pedido no tiene descargas digitales" });
+
+    const items = JSON.parse(order.items_json || "[]");
+    const orderedProduct = items.find(item => Number(item.id) === Number(req.params.productId) && normalizeFormat(item.format) === "digital");
+    if (!orderedProduct) return res.status(404).json({ error: "Archivo no encontrado para este pedido" });
+
+    const { rows } = await pool.query(
+      "SELECT title, digital_file_url, digital_file_name FROM products WHERE id = $1",
+      [req.params.productId]
+    );
+    const product = rows[0];
+    if (!product?.digital_file_url) return res.status(404).json({ error: "El archivo digital no esta disponible" });
+
+    const downloadName = product.digital_file_name || `${product.title}.pdf`;
+    if (/^https?:\/\//i.test(product.digital_file_url)) {
+      const remote = await fetch(product.digital_file_url);
+      if (!remote.ok) throw new Error("No se pudo obtener el archivo digital");
+      const contentType = remote.headers.get("content-type") || "application/octet-stream";
+      const buffer = Buffer.from(await remote.arrayBuffer());
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(downloadName)}"`);
+      return res.send(buffer);
+    }
+
+    const absolutePath = path.resolve(product.digital_file_url);
+    if (!absolutePath.startsWith(path.resolve(privateDigitalDir))) {
+      return res.status(403).json({ error: "Ruta de descarga invalida" });
+    }
+    return res.download(absolutePath, downloadName);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/orders", requireAdmin, async (_req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM orders ORDER BY id DESC LIMIT 100");
-    res.json({ orders: rows.map(row => ({ ...row, total: centsToAmount(row.total), items: JSON.parse(row.items_json || "[]") })) });
+    res.json({ orders: rows.map(orderRow) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -312,7 +546,11 @@ app.get("/api/orders", requireAdmin, async (_req, res) => {
 
 app.get("/js/data.js", async (_req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM products WHERE active = 1 ORDER BY id ASC");
+    const { rows } = await pool.query(`
+      SELECT * FROM products
+      WHERE active = 1
+      ORDER BY display_order ASC, CASE WHEN format = 'digital' THEN 0 ELSE 1 END, id DESC
+    `);
     const products = rows.map(row => ({
       id: row.id,
       slug: row.slug,
@@ -328,6 +566,8 @@ app.get("/js/data.js", async (_req, res) => {
       cover: normalizeImageUrl(row.image),
       synopsis: row.description,
       stock: row.stock,
+      displayOrder: Number(row.display_order || 0),
+      hasDigitalFile: Boolean(row.digital_file_url),
       pages: 240,
       language: "Español",
       featured: true,
@@ -397,6 +637,8 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
     }
 
     const cartItems = Array.isArray(req.body.items) ? req.body.items : [];
+    const buyer = req.body.buyer || {};
+    const shippingInfo = req.body.shipping || {};
     const { rows: products } = await pool.query("SELECT * FROM products WHERE active = 1");
     const productMap = new Map(products.map(product => [product.id, product]));
     const productSlugMap = new Map(products.map(product => [product.slug, product]));
@@ -405,9 +647,11 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
       const product = productSlugMap.get(String(item.slug || "")) || productMap.get(Number(item.id));
       if (!product) return null;
       const qty = Math.max(1, Number(item.qty || 1));
+      const format = normalizeFormat(product.format);
       return {
         product,
         qty,
+        format,
         mp: {
           id: String(product.id),
           title: product.title,
@@ -421,26 +665,46 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
 
     if (items.length === 0) return res.status(400).json({ error: "El carrito está vacío" });
 
+    const deliveryTypes = [...new Set(items.map(item => item.format))];
+    if (deliveryTypes.length !== 1) {
+      return res.status(400).json({ error: "No se pueden mezclar productos digitales y fisicos en la misma compra" });
+    }
+
+    const deliveryType = deliveryTypes[0] === "digital" ? "digital" : "physical";
     const subtotal = items.reduce((sum, item) => sum + item.product.price * item.qty, 0);
-    const shipping = subtotal >= 250000 ? 0 : 499000;
+    const shipping = deliveryType === "digital" ? 0 : (subtotal >= 250000 ? 0 : 499000);
     const total = subtotal + shipping;
-    const buyer = req.body.buyer || {};
+    const accessToken = makeAccessToken();
+
+    if (deliveryType === "physical" && !isTucumanShipping(shippingInfo.city, shippingInfo.country)) {
+      return res.status(400).json({ error: "Los libros fisicos solo se envian dentro de Tucuman, Argentina" });
+    }
 
     const { rows: orderRows } = await pool.query(`
-      INSERT INTO orders (status, buyer_name, buyer_email, buyer_phone, total, items_json)
-      VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+      INSERT INTO orders (
+        status, buyer_name, buyer_email, buyer_phone, total, items_json,
+        delivery_type, access_token, shipping_address, shipping_city, shipping_zip, shipping_country
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id
     `, [
       "pending",
-      buyer.name || "",
-      buyer.email || "",
-      buyer.phone || "",
+      normalizeText(buyer.name),
+      normalizeText(buyer.email),
+      normalizeText(buyer.phone),
       total,
       JSON.stringify(items.map(item => ({
         id: item.product.id,
         title: item.product.title,
         qty: item.qty,
-        unitPrice: centsToAmount(item.product.price)
-      })))
+        unitPrice: centsToAmount(item.product.price),
+        format: item.format
+      }))),
+      deliveryType,
+      accessToken,
+      deliveryType === "physical" ? normalizeText(shippingInfo.address) : "",
+      deliveryType === "physical" ? normalizeText(shippingInfo.city) : "",
+      deliveryType === "physical" ? normalizeText(shippingInfo.zip) : "",
+      deliveryType === "physical" ? normalizeText(shippingInfo.country || "AR") : ""
     ]);
 
     const orderId = orderRows[0].id;
@@ -464,9 +728,9 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
         phone: buyer.phone ? { number: buyer.phone } : undefined
       },
       back_urls: {
-        success: `${baseUrl}/checkout.html?payment=success`,
-        pending: `${baseUrl}/checkout.html?payment=pending`,
-        failure: `${baseUrl}/checkout.html?payment=failure`
+        success: `${baseUrl}/checkout.html?payment=success&order_id=${orderId}&token=${accessToken}`,
+        pending: `${baseUrl}/checkout.html?payment=pending&order_id=${orderId}&token=${accessToken}`,
+        failure: `${baseUrl}/checkout.html?payment=failure&order_id=${orderId}&token=${accessToken}`
       },
       auto_return: "approved",
       notification_url: `${baseUrl}/api/webhooks/mercadopago`
@@ -481,6 +745,8 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
     res.json({
       ok: true,
       orderId: orderId,
+      accessToken,
+      deliveryType,
       preferenceId: response.id,
       initPoint: response.init_point,
       sandboxInitPoint: response.sandbox_init_point
@@ -513,7 +779,7 @@ app.post("/api/webhooks/mercadopago", async (req, res) => {
 
 // Local only: serve disk uploads
 if (!isVercel) {
-  app.use("/assets/uploads", express.static(uploadsDir));
+  app.use("/assets/uploads", express.static(publicUploadsDir));
 }
 app.use(express.static(root));
 
