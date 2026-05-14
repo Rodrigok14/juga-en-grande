@@ -112,7 +112,8 @@ async function loadRequests() {
 }
 
 function renderProducts() {
-  $("#products-table").innerHTML = state.products.map(product => `
+  const products = state.products.filter(product => product.sourceType !== "combo");
+  $("#products-table").innerHTML = products.map(product => `
     <tr>
       <td>
         <div class="admin-product-cell">
@@ -177,6 +178,7 @@ function renderCombos() {
           <div>
             <strong>${escapeHtml(combo.title)}</strong>
             <div class="admin-muted">${escapeHtml(combo.description || "")}</div>
+            <div class="admin-muted">${combo.hasDigitalPack ? `ZIP listo: ${escapeHtml(combo.digitalFileName || "pack.zip")}` : "ZIP pendiente: selecciona libros digitales con archivo"}</div>
           </div>
         </div>
       </td>
@@ -287,14 +289,20 @@ function openComboModal(combo = null) {
   $("#combo-active").value = combo?.active === false ? "0" : "1";
   $("#combo-description").value = combo?.description || "";
   renderComboProductOptions(combo?.items?.map(item => item.id) || []);
+  $("#combo-digital-status").textContent = combo?.hasDigitalPack
+    ? `Pack generado: ${combo.digitalFileName}${combo.digitalFilesManifest?.length ? ` • contiene ${combo.digitalFilesManifest.length} archivo(s)` : ""}`
+    : "Al guardar, el sistema arma un ZIP con los PDFs de los libros digitales seleccionados.";
   $("#combo-modal").showModal();
 }
 
 function renderComboProductOptions(selected = []) {
   const select = $("#combo-products");
   if (!select) return;
-  select.innerHTML = state.products.map(product => `
-    <option value="${product.id}" ${selected.includes(product.id) ? "selected" : ""}>${escapeHtml(product.title)} - ${money(product.price)}</option>
+  const products = state.products.filter(product => product.sourceType !== "combo" && product.format === "digital");
+  select.innerHTML = products.map(product => `
+    <option value="${product.id}" ${selected.includes(product.id) ? "selected" : ""} ${product.hasDigitalFile ? "" : "disabled"}>
+      ${escapeHtml(product.title)} - ${money(product.price)}${product.hasDigitalFile ? "" : " (sin PDF/ZIP)"}
+    </option>
   `).join("");
 }
 
@@ -331,7 +339,12 @@ async function saveCombo(event) {
   form.set("price", $("#combo-price").value);
   form.set("active", $("#combo-active").value);
   form.set("description", $("#combo-description").value.trim());
-  form.set("productIds", [...$("#combo-products").selectedOptions].map(option => option.value).join(","));
+  const productIds = [...$("#combo-products").selectedOptions].map(option => option.value);
+  if (productIds.length === 0) {
+    showToast("Selecciona al menos un libro digital con PDF o ZIP");
+    return;
+  }
+  form.set("productIds", productIds.join(","));
   if ($("#combo-image").files[0]) form.set("image", $("#combo-image").files[0]);
   await api(id ? `/api/combos/${id}` : "/api/combos", { method: id ? "PUT" : "POST", body: form });
   closeModals();

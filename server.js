@@ -515,6 +515,15 @@ function uniqueZipEntryName(zip, entryName) {
   }
 }
 
+function safeZipPart(value, fallback = "archivo") {
+  const cleaned = String(value || fallback)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return cleaned || fallback;
+}
+
 async function loadStoredDigitalEntries(fileUrl, fileName) {
   if (!fileUrl) return [];
 
@@ -540,6 +549,39 @@ async function loadStoredDigitalEntries(fileUrl, fileName) {
   }
 
   return [];
+}
+
+async function buildComboDigitalPack(combo, products) {
+  const zip = new AdmZip();
+  const manifest = [];
+
+  for (const product of products) {
+    if (normalizeFormat(product.format) !== "digital" || !product.digital_file_url) continue;
+
+    const productFolder = safeZipPart(product.title, `libro-${product.id}`);
+    const entries = await loadStoredDigitalEntries(product.digital_file_url, product.digital_file_name);
+    for (const entry of entries) {
+      const entryName = uniqueZipEntryName(zip, `${productFolder}/${safeZipPart(entry.name, "archivo.pdf")}`);
+      zip.addFile(entryName, entry.buffer);
+      manifest.push(entryName);
+    }
+  }
+
+  if (manifest.length === 0) return null;
+
+  const zipName = `${safeZipPart(combo.slug || combo.title, `combo-${combo.id}`)}.zip`;
+  const storedUrl = await persistBinaryFile({
+    folder: "digital-combos",
+    filename: zipName,
+    buffer: zip.toBuffer(),
+    contentType: "application/zip"
+  });
+
+  return {
+    url: storedUrl,
+    name: zipName,
+    manifest
+  };
 }
 
 async function persistUploadedDigitalFile(singleFile, multipleFiles = [], options = {}) {
@@ -780,7 +822,9 @@ function productRow(row, options = {}) {
     digitalFilesManifest,
     hasPreview: Boolean(row.preview_file_url),
     previewUrl: row.preview_file_url ? `/api/products/${row.id}/preview` : "",
-    active: Boolean(row.active)
+    active: Boolean(row.active),
+    sourceType: row.source_type || "product",
+    sourceRefId: row.source_ref_id || null
   };
 
   if (options.includePrivate) {
@@ -805,6 +849,10 @@ function comboRow(row, items = []) {
     description: row.description,
     image: normalizeImageUrl(row.image),
     active: Boolean(row.active),
+    linkedProductId: row.linked_product_id || null,
+    digitalFileName: row.digital_file_name || "",
+    digitalFilesManifest: parseJsonArray(row.digital_files_manifest).filter(Boolean),
+    hasDigitalPack: Boolean(row.digital_file_url),
     items
   };
 }
@@ -1073,6 +1121,7 @@ app.post("/api/products", requireAdmin, productUpload, async (req, res) => {
       previewFileName,
       galleryImages
     ]);
+    await rebuildCombosForProduct(rows[0].id);
     res.status(201).json({ ok: true, id: rows[0].id });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1148,6 +1197,7 @@ app.put("/api/products/:id", requireAdmin, productUpload, async (req, res) => {
       JSON.stringify(galleryImages),
       req.params.id
     ]);
+    await rebuildCombosForProduct(req.params.id);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1161,6 +1211,7 @@ app.delete("/api/products/:id", requireAdmin, async (req, res) => {
       [req.params.id]
     );
     if (result.rowCount === 0) return res.status(404).json({ error: "Producto no encontrado" });
+    await rebuildCombosForProduct(req.params.id);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1174,10 +1225,12 @@ app.get("/api/combos", async (req, res) => {
     
     const combosWithItems = await Promise.all(rows.map(async (row) => {
       const { rows: items } = await pool.query(`
-        SELECT p.id, p.title, ci.qty
+        SELECT p.id, p.title, p.format, p.digital_file_url, ci.qty
         FROM combo_items ci
         JOIN products p ON p.id = ci.product_id
         WHERE ci.combo_id = $1
+          AND p.deleted_at IS NULL
+          AND COALESCE(p.source_type, 'product') = 'product'
         ORDER BY p.title
       `, [row.id]);
       return comboRow(row, items);
@@ -1202,6 +1255,7 @@ app.post("/api/combos", requireAdmin, upload.single("image"), async (req, res) =
     
     const comboId = rows[0].id;
     await saveComboItems(comboId, body.productIds);
+    await rebuildComboDigitalPack(comboId, { required: true });
     res.status(201).json({ ok: true, id: comboId });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1224,6 +1278,7 @@ app.put("/api/combos/:id", requireAdmin, upload.single("image"), async (req, res
     `, [body.slug, body.title, moneyToCents(body.price), body.description || "", image, body.active === "0" ? 0 : 1, req.params.id]);
     
     await saveComboItems(req.params.id, body.productIds);
+    await rebuildComboDigitalPack(req.params.id, { required: true });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1245,6 +1300,138 @@ async function saveComboItems(comboId, productIds) {
     throw e;
   } finally {
     client.release();
+  }
+}
+
+async function loadComboProducts(comboId) {
+  const { rows } = await pool.query(`
+    SELECT p.*
+    FROM combo_items ci
+    JOIN products p ON p.id = ci.product_id
+    WHERE ci.combo_id = $1
+      AND p.deleted_at IS NULL
+      AND COALESCE(p.source_type, 'product') = 'product'
+    ORDER BY p.title
+  `, [comboId]);
+  return rows;
+}
+
+async function rebuildComboDigitalPack(comboId, options = {}) {
+  const { rows: comboRows } = await pool.query("SELECT * FROM combos WHERE id = $1", [comboId]);
+  const combo = comboRows[0];
+  if (!combo) throw new Error("Combo no encontrado");
+
+  const products = await loadComboProducts(comboId);
+  const pack = await buildComboDigitalPack(combo, products);
+  if (!pack) {
+    if (options.required) {
+      throw new Error("El combo necesita al menos un libro digital con PDF o ZIP cargado");
+    }
+    await pool.query(`
+      UPDATE combos
+      SET digital_file_url = NULL,
+          digital_file_name = NULL,
+          digital_files_manifest = NULL,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+    `, [comboId]);
+    if (combo.linked_product_id) {
+      await pool.query(`
+        UPDATE products
+        SET active = 0,
+            digital_file_url = NULL,
+            digital_file_name = NULL,
+            digital_files_manifest = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1 AND COALESCE(source_type, 'product') = 'combo'
+      `, [combo.linked_product_id]);
+    }
+    return null;
+  }
+
+  await pool.query(`
+    UPDATE combos
+    SET digital_file_url = $1,
+        digital_file_name = $2,
+        digital_files_manifest = $3,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $4
+  `, [pack.url, pack.name, JSON.stringify(pack.manifest), comboId]);
+
+  await syncComboProduct(comboId, { ...combo, digital_file_url: pack.url, digital_file_name: pack.name, digital_files_manifest: JSON.stringify(pack.manifest) });
+}
+
+async function syncComboProduct(comboId, combo) {
+  const existingProductId = combo.linked_product_id ? Number(combo.linked_product_id) : null;
+  const { rows: linkedRows } = existingProductId
+    ? await pool.query("SELECT id FROM products WHERE id = $1 AND COALESCE(source_type, 'product') = 'combo'", [existingProductId])
+    : { rows: [] };
+
+  const linkedProduct = linkedRows[0] || null;
+  const slug = normalizeText(combo.slug);
+  const title = normalizeText(combo.title);
+  if (!slug || !title) throw new Error("El combo necesita titulo y slug");
+
+  const conflict = await pool.query(`
+    SELECT id
+    FROM products
+    WHERE slug = $1
+      AND deleted_at IS NULL
+      AND ($2::int IS NULL OR id <> $2)
+    LIMIT 1
+  `, [slug, linkedProduct?.id || null]);
+
+  if (conflict.rows.length) {
+    throw new Error("El slug del combo ya existe en productos. Usa otro slug para el pack.");
+  }
+
+  const values = [
+    slug,
+    title,
+    "Pack digital",
+    "negocios",
+    Number(combo.price || 0),
+    normalizeText(combo.description),
+    normalizeImageUrl(combo.image),
+    combo.active === 0 || combo.active === false ? 0 : 1,
+    combo.digital_file_url,
+    combo.digital_file_name,
+    combo.digital_files_manifest,
+    comboId
+  ];
+
+  if (linkedProduct) {
+    await pool.query(`
+      UPDATE products
+      SET slug=$1, title=$2, author=$3, category=$4, price=$5, old_price=NULL,
+          format='digital', stock=999, description=$6, image=$7, active=$8,
+          digital_file_url=$9, digital_file_name=$10, digital_files_manifest=$11,
+          preview_file_url=NULL, preview_file_name=NULL,
+          source_type='combo', source_ref_id=$12, updated_at=CURRENT_TIMESTAMP
+      WHERE id=$13
+    `, [...values, linkedProduct.id]);
+    return linkedProduct.id;
+  }
+
+  const { rows } = await pool.query(`
+    INSERT INTO products (
+      slug, title, author, category, price, old_price, format, stock, description,
+      image, active, digital_file_url, digital_file_name, digital_files_manifest,
+      preview_file_url, preview_file_name, source_type, source_ref_id
+    )
+    VALUES ($1, $2, $3, $4, $5, NULL, 'digital', 999, $6, $7, $8, $9, $10, $11, NULL, NULL, 'combo', $12)
+    RETURNING id
+  `, values);
+
+  const productId = rows[0].id;
+  await pool.query("UPDATE combos SET linked_product_id = $1 WHERE id = $2", [productId, comboId]);
+  return productId;
+}
+
+async function rebuildCombosForProduct(productId) {
+  const { rows } = await pool.query("SELECT DISTINCT combo_id FROM combo_items WHERE product_id = $1", [productId]);
+  for (const row of rows) {
+    await rebuildComboDigitalPack(row.combo_id, { required: false });
   }
 }
 
