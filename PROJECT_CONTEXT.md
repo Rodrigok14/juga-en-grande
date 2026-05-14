@@ -44,13 +44,33 @@ Minimum confirmed variables:
 
 - `DATABASE_URL`
 - `MP_ACCESS_TOKEN`
+- `PAYPAL_CLIENT_ID`
+- `PAYPAL_CLIENT_SECRET`
+- `PAYPAL_MODE`
 - `ADMIN_USER`
 - `ADMIN_PASSWORD`
+- `ADMIN_USERS`
 - `SESSION_SECRET`
 - `BASE_URL`
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SECURE`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `SMTP_FROM`
 - `PG_SSL_REJECT_UNAUTHORIZED` when needed
 - `DATABASE_SSL=false` for local Postgres without SSL
 - `BLOB_READ_WRITE_TOKEN` in Vercel for uploads
+
+Real secret values must not be committed or written in project docs. Store them in Vercel/Supabase/GitHub secrets or local ignored `.env` files only.
+
+## Reusable Ops Skill
+
+A reusable Codex skill was created outside the repo:
+
+- `C:\Users\Microsoft\.codex\skills\commerce-platform-ops\SKILL.md`
+
+Use it for future ecommerce projects that need Mercado Pago, PayPal, Vercel, Supabase, GitHub, secure environment variables, checkout/webhooks, digital delivery, deploys, and production verification.
 
 ## Working Flow
 
