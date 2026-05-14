@@ -120,7 +120,9 @@ function renderProducts() {
           <div>
             <strong>${escapeHtml(product.title)}</strong>
             <div class="admin-muted">${escapeHtml(product.author || "")}</div>
+            ${product.galleryImageCount > 1 ? `<div class="admin-muted">${product.galleryImageCount} imagenes disponibles</div>` : ""}
             ${product.hasDigitalFile ? `<div class="admin-muted">Archivo digital cargado</div>` : ""}
+            ${product.digitalFilesManifest?.length ? `<div class="admin-muted">${product.digitalFilesManifest.length} archivo(s) dentro del pack</div>` : ""}
             ${product.hasPreview ? `<div class="admin-muted">Muestra de lectura disponible</div>` : ""}
           </div>
         </div>
@@ -155,7 +157,9 @@ function renderProducts() {
       if (!confirmed) return;
       try {
         await api(`/api/products/${product.id}`, { method: "DELETE" });
-        await loadProducts();
+        state.products = state.products.filter(item => item.id !== product.id);
+        renderProducts();
+        renderComboProductOptions();
         showToast("Producto eliminado");
       } catch (error) {
         showToast(error.message);
@@ -265,8 +269,11 @@ function openProductModal(product = null) {
   $("#product-active").value = product?.active === false ? "0" : "1";
   $("#product-description").value = product?.description || product?.synopsis || "";
   $("#product-digital-file-status").textContent = product?.digitalFileName
-    ? `Archivo actual: ${product.digitalFileName}${product?.hasPreview ? " • muestra de lectura lista" : " • sin muestra automática"}`
-    : "Sin archivo digital cargado. Si subes un PDF, la muestra de 3 páginas se genera automáticamente.";
+    ? `Archivo actual: ${product.digitalFileName}${product?.hasPreview ? " • muestra de lectura lista" : " • sin muestra automática"}${product?.digitalFilesManifest?.length ? ` • contiene: ${product.digitalFilesManifest.join(", ")}` : ""}`
+    : "Sin archivo digital cargado. Si subes varios PDF, el sistema los comprime automaticamente en un ZIP y genera la muestra desde el primer PDF.";
+  $("#product-gallery-status").textContent = product?.galleryImages?.length > 1
+    ? `Fotos actuales: ${product.galleryImages.length - 1} extra ademas de la portada.`
+    : "Sin fotos extra cargadas.";
   $("#product-modal").showModal();
 }
 
@@ -307,7 +314,8 @@ async function saveProduct(event) {
   form.set("active", $("#product-active").value);
   form.set("description", $("#product-description").value.trim());
   if ($("#product-image").files[0]) form.set("image", $("#product-image").files[0]);
-  if ($("#product-digital-file").files[0]) form.set("digitalFile", $("#product-digital-file").files[0]);
+  [...$("#product-gallery-images").files].slice(0, 3).forEach(file => form.append("galleryImages", file));
+  [...$("#product-digital-files").files].forEach(file => form.append("digitalFiles", file));
   await api(id ? `/api/products/${id}` : "/api/products", { method: id ? "PUT" : "POST", body: form });
   closeModals();
   await loadProducts();

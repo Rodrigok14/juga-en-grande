@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@vercel/blob": "^1.1.1",
+    "adm-zip": "^0.5.17",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "mercadopago": "^2.7.0",

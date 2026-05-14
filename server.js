@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const express = require("express");
 const multer = require("multer");
 const nodemailer = require("nodemailer");
+const AdmZip = require("adm-zip");
 const { PDFDocument } = require("pdf-lib");
 const { put } = require("@vercel/blob");
 const { MercadoPagoConfig, Preference, Payment } = require("mercadopago");
@@ -32,7 +33,7 @@ function safeUploadFilename(originalname = "image") {
 const upload = multer({
   storage: isVercel ? multer.memoryStorage() : multer.diskStorage({
     destination: (_req, file, cb) => {
-      cb(null, file.fieldname === "digitalFile" ? privateDigitalDir : publicUploadsDir);
+      cb(null, file.fieldname === "digitalFile" || file.fieldname === "digitalFiles" ? privateDigitalDir : publicUploadsDir);
     },
     filename: (_req, file, cb) => cb(null, safeUploadFilename(file.originalname))
   }),
@@ -52,6 +53,27 @@ function normalizeImageUrl(value) {
 function uploadedFile(req, fieldname) {
   if (Array.isArray(req.files?.[fieldname])) return req.files[fieldname][0] || null;
   return null;
+}
+
+function uploadedFiles(req, fieldname) {
+  if (Array.isArray(req.files?.[fieldname])) return req.files[fieldname];
+  return [];
+}
+
+function normalizeDigitalUploadFiles(singleFile, multipleFiles = []) {
+  const files = [...multipleFiles];
+  if (singleFile) files.unshift(singleFile);
+  return files.filter(Boolean);
+}
+
+function parseJsonArray(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
 }
 
 function normalizeFormat(value) {
@@ -401,44 +423,195 @@ async function persistUploadedImage(file) {
   return `/assets/uploads/${file.filename}`;
 }
 
-async function persistUploadedDigitalFile(file) {
-  if (!file) return null;
-  const contentType = file.mimetype || "application/octet-stream";
-  const extension = path.extname(file.originalname || "").toLowerCase();
-  const allowedExtensions = new Set([".pdf", ".zip"]);
-  const looksLikePdf = contentType === "application/pdf";
-  const looksLikeZip = contentType === "application/zip" || contentType === "application/x-zip-compressed";
-
-  if (!allowedExtensions.has(extension) && !looksLikePdf && !looksLikeZip) {
-    throw new Error("El archivo digital debe ser PDF o ZIP");
+async function persistUploadedImages(files = []) {
+  const uploaded = [];
+  for (const file of files) {
+    const imageUrl = await persistUploadedImage(file);
+    if (imageUrl) uploaded.push(imageUrl);
   }
+  return uploaded;
+}
+
+async function persistBinaryFile({ folder, filename, buffer, contentType }) {
+  const safeName = safeUploadFilename(filename);
 
   if (isVercel) {
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
-      throw new Error("Falta configurar BLOB_READ_WRITE_TOKEN para guardar archivos digitales");
+      throw new Error("Falta configurar BLOB_READ_WRITE_TOKEN para guardar archivos");
     }
-    const filename = safeUploadFilename(file.originalname);
-    const blob = await put(`digital-products/${filename}`, file.buffer, {
+    const blob = await put(`${folder}/${safeName}`, buffer, {
       access: "public",
       contentType,
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
-    const preview = await persistDigitalPreview(file, filename);
+    return blob.url;
+  }
+
+  const absolutePath = path.join(privateDigitalDir, safeName);
+  await fs.promises.writeFile(absolutePath, buffer);
+  return absolutePath;
+}
+
+function digitalFileType(file) {
+  const contentType = file?.mimetype || "application/octet-stream";
+  const extension = path.extname(file?.originalname || file?.filename || "").toLowerCase();
+  const isPdf = contentType === "application/pdf" || extension === ".pdf";
+  const isZip = contentType === "application/zip" || contentType === "application/x-zip-compressed" || extension === ".zip";
+  return { extension, isPdf, isZip };
+}
+
+function uniqueZipEntryName(zip, entryName) {
+  const normalizedName = String(entryName || "archivo.pdf").replace(/\\/g, "/").split("/").filter(Boolean).join("/");
+  if (!zip.getEntry(normalizedName)) return normalizedName;
+
+  const parsed = path.posix.parse(normalizedName);
+  let counter = 2;
+  while (true) {
+    const candidate = `${parsed.dir ? `${parsed.dir}/` : ""}${parsed.name}-${counter}${parsed.ext}`;
+    if (!zip.getEntry(candidate)) return candidate;
+    counter += 1;
+  }
+}
+
+async function loadStoredDigitalEntries(fileUrl, fileName) {
+  if (!fileUrl) return [];
+
+  const buffer = await digitalBufferFromStoredUrl(fileUrl);
+  const extension = path.extname(fileName || fileUrl || "").toLowerCase();
+
+  if (extension === ".zip") {
+    const zip = new AdmZip(buffer);
+    return zip
+      .getEntries()
+      .filter(entry => !entry.isDirectory)
+      .map(entry => ({
+        name: entry.entryName.split("/").pop() || entry.entryName,
+        buffer: entry.getData()
+      }));
+  }
+
+  if (extension === ".pdf") {
+    return [{
+      name: fileName || path.basename(fileUrl) || "archivo-digital.pdf",
+      buffer
+    }];
+  }
+
+  return [];
+}
+
+async function persistUploadedDigitalFile(singleFile, multipleFiles = [], options = {}) {
+  const normalizedFiles = normalizeDigitalUploadFiles(singleFile, multipleFiles);
+  if (normalizedFiles.length === 0) return null;
+
+  const pdfFiles = [];
+  let zipFile = null;
+
+  for (const file of normalizedFiles) {
+    const contentType = file.mimetype || "application/octet-stream";
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    const isPdf = contentType === "application/pdf" || extension === ".pdf";
+    const isZip = contentType === "application/zip" || contentType === "application/x-zip-compressed" || extension === ".zip";
+
+    if (isPdf) {
+      pdfFiles.push(file);
+      continue;
+    }
+
+    if (isZip) {
+      if (normalizedFiles.length > 1) {
+        throw new Error("Sube un ZIP o varios PDF, pero no mezcles ambos formatos");
+      }
+      zipFile = file;
+      continue;
+    }
+
+    throw new Error("El archivo digital debe ser PDF o ZIP");
+  }
+
+  if (zipFile) {
+    const zipBuffer = await digitalFileBuffer(zipFile);
+    const manifest = new AdmZip(zipBuffer)
+      .getEntries()
+      .filter(entry => !entry.isDirectory)
+      .map(entry => entry.entryName.split("/").pop() || entry.entryName);
+    const storedUrl = await persistBinaryFile({
+      folder: "digital-products",
+      filename: zipFile.originalname || "archivo-digital.zip",
+      buffer: zipBuffer,
+      contentType: zipFile.mimetype || "application/zip"
+    });
     return {
-      url: blob.url,
-      name: file.originalname || filename,
+      url: storedUrl,
+      name: zipFile.originalname || "archivo-digital.zip",
+      manifest,
+      previewUrl: null,
+      previewName: null
+    };
+  }
+
+  const shouldMergeWithExisting = Boolean(options.existingUrl) && pdfFiles.length > 0;
+
+  if (pdfFiles.length === 1 && !shouldMergeWithExisting) {
+    const pdfFile = pdfFiles[0];
+    const pdfBuffer = await digitalFileBuffer(pdfFile);
+    const storedUrl = await persistBinaryFile({
+      folder: "digital-products",
+      filename: pdfFile.originalname || "archivo-digital.pdf",
+      buffer: pdfBuffer,
+      contentType: pdfFile.mimetype || "application/pdf"
+    });
+    const preview = await persistDigitalPreview(pdfFile, pdfFile.originalname || "archivo-digital.pdf");
+    return {
+      url: storedUrl,
+      name: pdfFile.originalname || "archivo-digital.pdf",
+      manifest: [pdfFile.originalname || "archivo-digital.pdf"],
       previewUrl: preview?.url || null,
       previewName: preview?.name || null
     };
   }
 
-  const preview = await persistDigitalPreview(file, file.filename);
-  return {
-    url: path.join(privateDigitalDir, file.filename),
-    name: file.originalname || file.filename,
-    previewUrl: preview?.url || null,
-    previewName: preview?.name || null
-  };
+  if (pdfFiles.length > 1 || shouldMergeWithExisting) {
+    const zip = new AdmZip();
+    const manifest = [];
+
+    if (shouldMergeWithExisting) {
+      const existingEntries = await loadStoredDigitalEntries(options.existingUrl, options.existingName);
+      for (const entry of existingEntries) {
+        const entryName = uniqueZipEntryName(zip, entry.name);
+        zip.addFile(entryName, entry.buffer);
+        manifest.push(entryName);
+      }
+    }
+
+    for (const file of pdfFiles) {
+      const entryName = uniqueZipEntryName(zip, file.originalname || safeUploadFilename("archivo.pdf"));
+      zip.addFile(entryName, await digitalFileBuffer(file));
+      manifest.push(entryName);
+    }
+
+    const zipBuffer = zip.toBuffer();
+    const existingName = String(options.existingName || "");
+    const zipName = existingName.toLowerCase().endsWith(".zip")
+      ? existingName
+      : `pack-${Date.now()}.zip`;
+    const storedUrl = await persistBinaryFile({
+      folder: "digital-products",
+      filename: zipName,
+      buffer: zipBuffer,
+      contentType: "application/zip"
+    });
+    const preview = await persistDigitalPreview(pdfFiles[0], pdfFiles[0].originalname || "archivo-digital.pdf");
+    return {
+      url: storedUrl,
+      name: zipName,
+      manifest,
+      previewUrl: preview?.url || null,
+      previewName: preview?.name || null
+    };
+  }
+
+  return null;
 }
 
 async function digitalFileBuffer(file) {
@@ -539,6 +712,12 @@ function previewNeedsRegeneration(previewUrl) {
 }
 
 function productRow(row, options = {}) {
+  const galleryImages = parseJsonArray(row.gallery_images).map(normalizeImageUrl).filter(Boolean);
+  const normalizedGallery = [normalizeImageUrl(row.image), ...galleryImages]
+    .filter(Boolean)
+    .filter((value, index, items) => items.indexOf(value) === index);
+  const digitalFilesManifest = parseJsonArray(row.digital_files_manifest).filter(Boolean);
+
   const item = {
     id: row.id,
     slug: row.slug,
@@ -552,9 +731,11 @@ function productRow(row, options = {}) {
     displayOrder: Number(row.display_order || 0),
     cover: normalizeImageUrl(row.image),
     image: normalizeImageUrl(row.image),
+    galleryImages: normalizedGallery,
     synopsis: row.description,
     description: row.description,
     hasDigitalFile: Boolean(row.digital_file_url),
+    digitalFilesManifest,
     hasPreview: Boolean(row.preview_file_url),
     previewUrl: row.preview_file_url ? `/api/products/${row.id}/preview` : "",
     active: Boolean(row.active)
@@ -563,6 +744,9 @@ function productRow(row, options = {}) {
   if (options.includePrivate) {
     item.digitalFileName = row.digital_file_name || "";
     item.digitalFileUrl = row.digital_file_url || "";
+    item.galleryImages = normalizedGallery;
+    item.galleryImageCount = normalizedGallery.length;
+    item.digitalFilesManifest = digitalFilesManifest;
     item.previewFileName = row.preview_file_name || "";
     item.previewFileUrl = row.preview_file_url || "";
   }
@@ -611,7 +795,7 @@ async function listDigitalOrderItems(order) {
   const { rows } = await pool.query(
     `SELECT id, title, digital_file_url, digital_file_name
      FROM products
-     WHERE id = ANY($1::int[]) AND active = 1`,
+     WHERE id = ANY($1::int[])`,
     [digitalIds]
   );
 
@@ -639,7 +823,7 @@ async function loadDigitalEmailAttachments(order) {
   const { rows } = await pool.query(
     `SELECT id, title, digital_file_url, digital_file_name
      FROM products
-     WHERE id = ANY($1::int[]) AND active = 1`,
+     WHERE id = ANY($1::int[])`,
     [digitalIds]
   );
 
@@ -741,7 +925,7 @@ app.get("/api/products", async (req, res) => {
     const includeInactive = req.query.all === "1" && adminSession;
     const { rows } = await pool.query(`
       SELECT * FROM products
-      ${includeInactive ? "" : "WHERE active = 1"}
+      ${includeInactive ? "WHERE deleted_at IS NULL" : "WHERE active = 1 AND deleted_at IS NULL"}
       ORDER BY display_order ASC, CASE WHEN format = 'digital' THEN 0 ELSE 1 END, id DESC
     `);
     res.json({ products: rows.map(row => productRow(row, { includePrivate: Boolean(adminSession) })) });
@@ -752,7 +936,7 @@ app.get("/api/products", async (req, res) => {
 
 app.get("/api/products/:id", async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM products WHERE id = $1", [req.params.id]);
+    const { rows } = await pool.query("SELECT * FROM products WHERE id = $1 AND deleted_at IS NULL", [req.params.id]);
     if (rows.length === 0) return res.status(404).json({ error: "Producto no encontrado" });
     res.json({ product: productRow(rows[0]) });
   } catch (err) {
@@ -763,11 +947,11 @@ app.get("/api/products/:id", async (req, res) => {
 app.get("/api/products/:id/preview", async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, title, digital_file_url, digital_file_name, preview_file_url, preview_file_name, active FROM products WHERE id = $1",
+      "SELECT id, title, digital_file_url, digital_file_name, preview_file_url, preview_file_name, active, deleted_at FROM products WHERE id = $1",
       [req.params.id]
     );
     const product = rows[0];
-    if (!product || !product.active) return res.status(404).json({ error: "Producto no encontrado" });
+    if (!product || !product.active || product.deleted_at) return res.status(404).json({ error: "Producto no encontrado" });
     let previewUrl = product.preview_file_url;
     let previewName = product.preview_file_name || `${product.title}-muestra.pdf`;
 
@@ -794,7 +978,9 @@ app.get("/api/products/:id/preview", async (req, res) => {
 
 const productUpload = upload.fields([
   { name: "image", maxCount: 1 },
-  { name: "digitalFile", maxCount: 1 }
+  { name: "galleryImages", maxCount: 3 },
+  { name: "digitalFile", maxCount: 1 },
+  { name: "digitalFiles", maxCount: 20 }
 ]);
 
 app.post("/api/products", requireAdmin, productUpload, async (req, res) => {
@@ -802,23 +988,29 @@ app.post("/api/products", requireAdmin, productUpload, async (req, res) => {
     const body = req.body;
     const format = body.format || "fisico";
     const imageFile = uploadedFile(req, "image");
+    const galleryImageFiles = uploadedFiles(req, "galleryImages");
     const digitalFile = uploadedFile(req, "digitalFile");
+    const digitalFiles = uploadedFiles(req, "digitalFiles");
     const uploaded = await persistUploadedImage(imageFile);
-    const uploadedDigital = await persistUploadedDigitalFile(digitalFile);
+    const uploadedGalleryImages = await persistUploadedImages(galleryImageFiles);
+    const uploadedDigital = await persistUploadedDigitalFile(digitalFile, digitalFiles);
     const image = uploaded || normalizeImageUrl(body.image) || DEFAULT_IMAGE;
     if (format === "digital" && !uploadedDigital) {
       return res.status(400).json({ error: "Los productos digitales deben incluir un PDF o ZIP" });
     }
     const digitalFileUrl = format === "digital" ? uploadedDigital?.url || null : null;
     const digitalFileName = format === "digital" ? uploadedDigital?.name || null : null;
+    const digitalFilesManifest = format === "digital" ? JSON.stringify(uploadedDigital?.manifest || []) : null;
     const previewFileUrl = format === "digital" ? uploadedDigital?.previewUrl || null : null;
     const previewFileName = format === "digital" ? uploadedDigital?.previewName || null : null;
+    const galleryImages = JSON.stringify(uploadedGalleryImages);
     const { rows } = await pool.query(`
       INSERT INTO products (
         slug, title, author, category, price, old_price, format, stock, image, description,
-        active, display_order, digital_file_url, digital_file_name, preview_file_url, preview_file_name
+        active, display_order, digital_file_url, digital_file_name, digital_files_manifest,
+        preview_file_url, preview_file_name, gallery_images
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id
     `, [
       body.slug,
       body.title,
@@ -834,8 +1026,10 @@ app.post("/api/products", requireAdmin, productUpload, async (req, res) => {
       Number(body.displayOrder || 0),
       digitalFileUrl,
       digitalFileName,
+      digitalFilesManifest,
       previewFileUrl,
-      previewFileName
+      previewFileName,
+      galleryImages
     ]);
     res.status(201).json({ ok: true, id: rows[0].id });
   } catch (err) {
@@ -845,21 +1039,32 @@ app.post("/api/products", requireAdmin, productUpload, async (req, res) => {
 
 app.put("/api/products/:id", requireAdmin, productUpload, async (req, res) => {
   try {
-    const { rows: existingRows } = await pool.query("SELECT * FROM products WHERE id = $1", [req.params.id]);
+    const { rows: existingRows } = await pool.query("SELECT * FROM products WHERE id = $1 AND deleted_at IS NULL", [req.params.id]);
     if (existingRows.length === 0) return res.status(404).json({ error: "Producto no encontrado" });
     
     const body = req.body;
     const format = body.format || "fisico";
     const imageFile = uploadedFile(req, "image");
+    const galleryImageFiles = uploadedFiles(req, "galleryImages");
     const digitalFile = uploadedFile(req, "digitalFile");
+    const digitalFiles = uploadedFiles(req, "digitalFiles");
     const uploaded = await persistUploadedImage(imageFile);
-    const uploadedDigital = await persistUploadedDigitalFile(digitalFile);
+    const uploadedGalleryImages = await persistUploadedImages(galleryImageFiles);
+    const uploadedDigital = await persistUploadedDigitalFile(digitalFile, digitalFiles, {
+      existingUrl: existingRows[0].digital_file_url,
+      existingName: existingRows[0].digital_file_name
+    });
     const image = uploaded || normalizeImageUrl(body.image || existingRows[0].image);
+    const currentGalleryImages = parseJsonArray(existingRows[0].gallery_images).map(normalizeImageUrl).filter(Boolean);
+    const galleryImages = uploadedGalleryImages.length > 0 ? uploadedGalleryImages : currentGalleryImages;
     const digitalFileUrl = format === "digital"
       ? (uploadedDigital?.url || existingRows[0].digital_file_url || null)
       : null;
     const digitalFileName = format === "digital"
       ? (uploadedDigital?.name || existingRows[0].digital_file_name || null)
+      : null;
+    const digitalFilesManifest = format === "digital"
+      ? JSON.stringify(uploadedDigital?.manifest || parseJsonArray(existingRows[0].digital_files_manifest))
       : null;
     const previewFileUrl = format === "digital"
       ? (uploadedDigital?.previewUrl || existingRows[0].preview_file_url || null)
@@ -877,8 +1082,9 @@ app.put("/api/products/:id", requireAdmin, productUpload, async (req, res) => {
       SET slug=$1, title=$2, author=$3, category=$4, price=$5, old_price=$6,
           format=$7, stock=$8, image=$9, description=$10, active=$11,
           display_order=$12, digital_file_url=$13, digital_file_name=$14,
-          preview_file_url=$15, preview_file_name=$16, updated_at=CURRENT_TIMESTAMP
-      WHERE id=$17
+          digital_files_manifest=$15, preview_file_url=$16, preview_file_name=$17,
+          gallery_images=$18, updated_at=CURRENT_TIMESTAMP
+      WHERE id=$19
     `, [
       body.slug,
       body.title,
@@ -894,8 +1100,10 @@ app.put("/api/products/:id", requireAdmin, productUpload, async (req, res) => {
       Number(body.displayOrder || 0),
       digitalFileUrl,
       digitalFileName,
+      digitalFilesManifest,
       previewFileUrl,
       previewFileName,
+      JSON.stringify(galleryImages),
       req.params.id
     ]);
     res.json({ ok: true });
@@ -906,7 +1114,11 @@ app.put("/api/products/:id", requireAdmin, productUpload, async (req, res) => {
 
 app.delete("/api/products/:id", requireAdmin, async (req, res) => {
   try {
-    await pool.query("UPDATE products SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = $1", [req.params.id]);
+    const result = await pool.query(
+      "UPDATE products SET active = 0, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND deleted_at IS NULL",
+      [req.params.id]
+    );
+    if (result.rowCount === 0) return res.status(404).json({ error: "Producto no encontrado" });
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1163,7 +1375,7 @@ app.get("/js/data.js", async (_req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT * FROM products
-      WHERE active = 1
+      WHERE active = 1 AND deleted_at IS NULL
       ORDER BY display_order ASC, CASE WHEN format = 'digital' THEN 0 ELSE 1 END, id DESC
     `);
     const products = rows.map(row => ({
@@ -1179,10 +1391,14 @@ app.get("/js/data.js", async (_req, res) => {
       format: row.format === "fisico" ? "físico" : "digital",
       badge: row.old_price ? "sale" : null,
       cover: normalizeImageUrl(row.image),
+      galleryImages: [normalizeImageUrl(row.image), ...parseJsonArray(row.gallery_images).map(normalizeImageUrl)]
+        .filter(Boolean)
+        .filter((value, index, items) => items.indexOf(value) === index),
       synopsis: row.description,
       stock: row.stock,
       displayOrder: Number(row.display_order || 0),
       hasDigitalFile: Boolean(row.digital_file_url),
+      digitalFilesManifest: parseJsonArray(row.digital_files_manifest).filter(Boolean),
       hasPreview: Boolean(row.preview_file_url),
       previewUrl: row.preview_file_url ? `/api/products/${row.id}/preview` : "",
       pages: 240,
@@ -1259,7 +1475,7 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
     if (!isValidEmail(buyer.email)) {
       return res.status(400).json({ error: "El email es obligatorio para enviar el comprobante y la descarga" });
     }
-    const { rows: products } = await pool.query("SELECT * FROM products WHERE active = 1");
+    const { rows: products } = await pool.query("SELECT * FROM products WHERE active = 1 AND deleted_at IS NULL");
     const productMap = new Map(products.map(product => [product.id, product]));
     const productSlugMap = new Map(products.map(product => [product.slug, product]));
 
@@ -1396,7 +1612,7 @@ app.post("/api/checkout/paypal", async (req, res) => {
       return res.status(400).json({ error: "PayPal queda reservado para clientes fuera de Argentina" });
     }
 
-    const { rows: products } = await pool.query("SELECT * FROM products WHERE active = 1");
+    const { rows: products } = await pool.query("SELECT * FROM products WHERE active = 1 AND deleted_at IS NULL");
     const productMap = new Map(products.map(product => [product.id, product]));
     const productSlugMap = new Map(products.map(product => [product.slug, product]));
 

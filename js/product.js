@@ -32,6 +32,9 @@
   let selectedFormat = normalizeFormat(book.format);
   const discount = book.oldPrice ? Math.round((1 - book.price / book.oldPrice) * 100) : null;
   const isDigital = selectedFormat === "digital";
+  const galleryImages = Array.isArray(book.galleryImages) && book.galleryImages.length
+    ? book.galleryImages
+    : [book.cover];
 
   let stockHTML = "";
   if (book.stock === 0) {
@@ -66,13 +69,15 @@
     <div class="product-layout" id="product-layout">
       <div class="product-gallery">
         <div class="product-main-img" id="main-img-wrap">
-          <img src="${book.cover}" alt="Portada de ${book.title}" id="main-img" />
+          <img src="${galleryImages[0]}" alt="Portada de ${book.title}" id="main-img" />
           <div class="zoom-hint">🔍 Zoom</div>
         </div>
         <div class="gallery-thumbs">
-          <div class="gallery-thumb active"><img src="${book.cover}" alt="${book.title}" /></div>
-          <div class="gallery-thumb"><img src="${book.cover}" alt="${book.title}" style="filter:sepia(.3)" /></div>
-          <div class="gallery-thumb"><img src="${book.cover}" alt="${book.title}" style="filter:brightness(.8)" /></div>
+          ${galleryImages.map((image, index) => `
+            <div class="gallery-thumb ${index === 0 ? "active" : ""}">
+              <img src="${image}" alt="${book.title}" />
+            </div>
+          `).join("")}
         </div>
       </div>
 

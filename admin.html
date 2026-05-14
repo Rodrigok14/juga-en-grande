@@ -214,9 +214,11 @@
           </select>
         </label>
         <label>Portada<input id="product-image" name="image" type="file" accept="image/*" /></label>
-        <label>Archivo digital<input id="product-digital-file" name="digitalFile" type="file" accept=".pdf,.zip,application/pdf,application/zip" /></label>
+        <label>Fotos extra del producto (hasta 3)<input id="product-gallery-images" name="galleryImages" type="file" accept="image/*" multiple /></label>
+        <label>Archivos digitales (PDF o ZIP)<input id="product-digital-files" name="digitalFiles" type="file" accept=".pdf,.zip,application/pdf,application/zip" multiple /></label>
       </div>
       <p class="admin-muted" id="product-digital-file-status">Sin archivo digital cargado. Si subes un PDF, la muestra de 3 páginas se genera automáticamente.</p>
+      <p class="admin-muted" id="product-gallery-status">Sin fotos extra cargadas.</p>
       <label>Descripcion<textarea id="product-description" name="description" rows="4"></textarea></label>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" data-close-modal>Cancelar</button>
