@@ -91,6 +91,86 @@ function requestBaseUrl(req) {
   return `${proto}://${host}`.replace(/\/+$/, "");
 }
 
+const exchangeRateCache = { value: 0, fetchedAt: 0 };
+
+async function getUsdArsRate() {
+  const fallback = Number(process.env.USD_ARS_RATE || 0);
+  const now = Date.now();
+  if (exchangeRateCache.value && now - exchangeRateCache.fetchedAt < 60 * 60 * 1000) {
+    return exchangeRateCache.value;
+  }
+
+  try {
+    const response = await fetch("https://open.er-api.com/v6/latest/USD");
+    if (!response.ok) throw new Error("No se pudo obtener la cotizacion USD/ARS");
+    const data = await response.json();
+    const rate = Number(data?.rates?.ARS || 0);
+    if (!rate) throw new Error("Cotizacion USD/ARS invalida");
+    exchangeRateCache.value = rate;
+    exchangeRateCache.fetchedAt = now;
+    return rate;
+  } catch (error) {
+    if (fallback > 0) return fallback;
+    throw error;
+  }
+}
+
+function paypalBaseUrl() {
+  return process.env.PAYPAL_ENV === "live"
+    ? "https://api-m.paypal.com"
+    : "https://api-m.sandbox.paypal.com";
+}
+
+function paypalConfigured() {
+  return Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET);
+}
+
+async function paypalAccessToken() {
+  if (!paypalConfigured()) {
+    throw new Error("Faltan PAYPAL_CLIENT_ID y PAYPAL_CLIENT_SECRET");
+  }
+
+  const credentials = Buffer
+    .from(`${process.env.PAYPAL_CLIENT_ID}:${process.env.PAYPAL_CLIENT_SECRET}`)
+    .toString("base64");
+
+  const response = await fetch(`${paypalBaseUrl()}/v1/oauth2/token`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: "grant_type=client_credentials"
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error_description || data?.message || "No se pudo autenticar con PayPal");
+  }
+  return data.access_token;
+}
+
+async function paypalRequest(pathname, options = {}) {
+  const token = await paypalAccessToken();
+  const response = await fetch(`${paypalBaseUrl()}${pathname}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...(options.headers || {})
+    }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.message || data?.details?.[0]?.description || "PayPal rechazo la operacion");
+  }
+  return data;
+}
+
+function amountToUsd(arsCents, usdArsRate) {
+  return (Number(arsCents || 0) / 100 / usdArsRate).toFixed(2);
+}
+
 async function persistUploadedImage(file) {
   if (!file) return null;
   const contentType = file.mimetype || "application/octet-stream";
@@ -552,6 +632,15 @@ app.get("/api/orders", requireAdmin, async (_req, res) => {
   }
 });
 
+app.get("/api/exchange-rate", async (_req, res) => {
+  try {
+    const usdArsRate = await getUsdArsRate();
+    res.json({ ok: true, base: "USD", quote: "ARS", usdArsRate });
+  } catch (err) {
+    res.status(500).json({ error: "No se pudo obtener la cotizacion USD/ARS" });
+  }
+});
+
 app.get("/js/data.js", async (_req, res) => {
   try {
     const { rows } = await pool.query(`
@@ -691,9 +780,10 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
     const { rows: orderRows } = await pool.query(`
       INSERT INTO orders (
         status, buyer_name, buyer_email, buyer_phone, total, items_json,
-        delivery_type, access_token, shipping_address, shipping_city, shipping_zip, shipping_country
+        delivery_type, access_token, shipping_address, shipping_city, shipping_zip, shipping_country,
+        payment_provider, payment_currency
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id
     `, [
       "pending",
       normalizeText(buyer.name),
@@ -712,7 +802,9 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
       deliveryType === "physical" ? normalizeText(shippingInfo.address) : "",
       deliveryType === "physical" ? normalizeText(shippingInfo.city) : "",
       deliveryType === "physical" ? normalizeText(shippingInfo.zip) : "",
-      deliveryType === "physical" ? normalizeText(shippingInfo.country || "AR") : ""
+      deliveryType === "physical" ? normalizeText(shippingInfo.country || "AR") : "",
+      "mercadopago",
+      "ARS"
     ]);
 
     const orderId = orderRows[0].id;
@@ -761,6 +853,166 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "No se pudo crear el pago en Mercado Pago" });
+  }
+});
+
+app.post("/api/checkout/paypal", async (req, res) => {
+  try {
+    if (!paypalConfigured()) {
+      return res.status(500).json({ error: "Falta configurar PayPal en Vercel" });
+    }
+
+    const cartItems = Array.isArray(req.body.items) ? req.body.items : [];
+    const buyer = req.body.buyer || {};
+    const billing = req.body.billing || {};
+    const country = normalizeText(billing.country || "").toUpperCase();
+    if (!country || country === "AR") {
+      return res.status(400).json({ error: "PayPal queda reservado para clientes fuera de Argentina" });
+    }
+
+    const { rows: products } = await pool.query("SELECT * FROM products WHERE active = 1");
+    const productMap = new Map(products.map(product => [product.id, product]));
+    const productSlugMap = new Map(products.map(product => [product.slug, product]));
+
+    const items = cartItems.map(item => {
+      const product = productSlugMap.get(String(item.slug || "")) || productMap.get(Number(item.id));
+      if (!product) return null;
+      const qty = Math.max(1, Number(item.qty || 1));
+      return {
+        product,
+        qty,
+        format: normalizeFormat(product.format)
+      };
+    }).filter(Boolean);
+
+    if (items.length === 0) return res.status(400).json({ error: "El carrito esta vacio" });
+    if (items.some(item => item.format !== "digital")) {
+      return res.status(400).json({ error: "PayPal solo esta habilitado para productos digitales internacionales" });
+    }
+
+    const subtotal = items.reduce((sum, item) => sum + Number(item.product.price || 0) * item.qty, 0);
+    const usdArsRate = await getUsdArsRate();
+    const totalUsd = amountToUsd(subtotal, usdArsRate);
+    if (Number(totalUsd) <= 0) return res.status(400).json({ error: "El total en USD es invalido" });
+
+    const accessToken = makeAccessToken();
+    const { rows: orderRows } = await pool.query(`
+      INSERT INTO orders (
+        status, buyer_name, buyer_email, buyer_phone, total, items_json,
+        delivery_type, access_token, shipping_address, shipping_city, shipping_zip, shipping_country,
+        payment_provider, payment_currency, exchange_rate
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id
+    `, [
+      "pending",
+      normalizeText(buyer.name),
+      normalizeText(buyer.email),
+      normalizeText(buyer.phone),
+      subtotal,
+      JSON.stringify(items.map(item => ({
+        id: item.product.id,
+        title: item.product.title,
+        qty: item.qty,
+        unitPrice: centsToAmount(item.product.price),
+        format: item.format
+      }))),
+      "digital",
+      accessToken,
+      "",
+      "",
+      "",
+      country,
+      "paypal",
+      "USD",
+      usdArsRate
+    ]);
+
+    const orderId = orderRows[0].id;
+    const baseUrl = requestBaseUrl(req);
+    const paypalOrder = await paypalRequest("/v2/checkout/orders", {
+      method: "POST",
+      body: JSON.stringify({
+        intent: "CAPTURE",
+        purchase_units: [{
+          custom_id: String(orderId),
+          description: `Pedido digital Juga en Grande #${orderId}`,
+          amount: {
+            currency_code: "USD",
+            value: totalUsd
+          }
+        }],
+        payment_source: {
+          paypal: {
+            experience_context: {
+              brand_name: "Juga en Grande",
+              shipping_preference: "NO_SHIPPING",
+              user_action: "PAY_NOW",
+              return_url: `${baseUrl}/api/checkout/paypal/return?order_id=${orderId}&access_token=${accessToken}`,
+              cancel_url: `${baseUrl}/checkout.html?payment=failure&order_id=${orderId}&token=${accessToken}`
+            }
+          }
+        }
+      })
+    });
+
+    const approveUrl = (paypalOrder.links || []).find(link => link.rel === "payer-action" || link.rel === "approve")?.href;
+    if (!approveUrl) throw new Error("PayPal no devolvio URL de aprobacion");
+
+    await pool.query(
+      "UPDATE orders SET paypal_order_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+      [paypalOrder.id, orderId]
+    );
+
+    res.json({
+      ok: true,
+      orderId,
+      accessToken,
+      deliveryType: "digital",
+      paymentProvider: "paypal",
+      currency: "USD",
+      exchangeRate: usdArsRate,
+      totalUsd: Number(totalUsd),
+      approveUrl
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "No se pudo crear el pago en PayPal" });
+  }
+});
+
+app.get("/api/checkout/paypal/return", async (req, res) => {
+  const orderId = String(req.query.order_id || "");
+  const accessToken = String(req.query.access_token || "");
+  try {
+    const paypalOrderId = String(req.query.token || "");
+    if (!orderId || !accessToken || !paypalOrderId) throw new Error("Retorno PayPal invalido");
+
+    const { rows } = await pool.query(
+      "SELECT * FROM orders WHERE id = $1 AND access_token = $2 AND paypal_order_id = $3",
+      [orderId, accessToken, paypalOrderId]
+    );
+    const order = rows[0];
+    if (!order) throw new Error("Pedido PayPal no encontrado");
+
+    const capture = await paypalRequest(`/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}/capture`, {
+      method: "POST",
+      body: "{}"
+    });
+    const completed = capture.status === "COMPLETED";
+    await pool.query(`
+      UPDATE orders
+      SET status = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+    `, [completed ? "approved" : String(capture.status || "pending").toLowerCase(), orderId]);
+
+    const payment = completed ? "success" : "pending";
+    res.redirect(`/checkout.html?payment=${payment}&order_id=${encodeURIComponent(orderId)}&token=${encodeURIComponent(accessToken)}`);
+  } catch (error) {
+    console.error("PayPal return error", error);
+    const suffix = orderId && accessToken
+      ? `&order_id=${encodeURIComponent(orderId)}&token=${encodeURIComponent(accessToken)}`
+      : "";
+    res.redirect(`/checkout.html?payment=failure${suffix}`);
   }
 });
 

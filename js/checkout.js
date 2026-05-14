@@ -1,5 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   let currentStep = 1;
+  let exchangeRate = null;
   const cartItems = Cart.getItems();
 
   function normalizeFormat(value) {
@@ -17,17 +18,51 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const checkoutType = getCheckoutType(cartItems);
 
+  function selectedCountry() {
+    return (document.getElementById("country")?.value || "AR").toUpperCase();
+  }
+
+  function paymentProvider() {
+    if (checkoutType === "digital" && selectedCountry() !== "AR") return "paypal";
+    return "mercadopago";
+  }
+
+  function formatArs(value) {
+    return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS" }).format(Number(value || 0));
+  }
+
+  function formatUsd(value) {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value || 0));
+  }
+
+  async function loadExchangeRate() {
+    if (exchangeRate) return exchangeRate;
+    const response = await fetch("/api/exchange-rate");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "No se pudo obtener el valor del dolar");
+    exchangeRate = Number(data.usdArsRate || 0);
+    if (!exchangeRate) throw new Error("El valor del dolar recibido no es valido");
+    return exchangeRate;
+  }
+
+  function setCheckoutError(message) {
+    const errorBox = document.getElementById("checkout-type-error");
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.style.display = message ? "block" : "none";
+  }
+
   function formatSectionForType() {
     const shippingBlock = document.getElementById("shipping-section");
     const shippingTitle = document.getElementById("shipping-title");
     const shippingNote = document.getElementById("shipping-note");
-    const shippingFields = ["address", "city", "zip", "country"];
-    const shippingGroups = ["address-group", "city-group", "zip-group", "country-group", "city-zip-row"];
+    const shippingFields = ["address", "city", "zip"];
+    const shippingGroups = ["address-group", "city-group", "zip-group", "city-zip-row"];
 
     if (checkoutType === "digital") {
       shippingBlock?.classList.add("is-digital");
-      if (shippingTitle) shippingTitle.textContent = "Entrega digital";
-      if (shippingNote) shippingNote.textContent = "Este pack se habilita para descarga automatica despues de que Mercado Pago confirme el pago.";
+      if (shippingTitle) shippingTitle.textContent = "Pais de facturacion";
+      if (shippingNote) shippingNote.textContent = "Argentina paga con Mercado Pago. Otros paises pagan con PayPal en USD.";
       shippingGroups.forEach(id => {
         const element = document.getElementById(id);
         if (element) element.style.display = "none";
@@ -38,8 +73,6 @@ document.addEventListener("DOMContentLoaded", () => {
         input.required = false;
         input.value = "";
       });
-      const country = document.getElementById("country");
-      if (country) country.value = "AR";
     }
 
     if (checkoutType === "fisico") {
@@ -48,36 +81,71 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  function updatePaymentMethod() {
+    const provider = paymentProvider();
+    const mpOption = document.getElementById("pm-mp");
+    const paypalOption = document.getElementById("pm-paypal");
+    const mpInfo = document.getElementById("mp-info");
+    const paypalInfo = document.getElementById("paypal-info");
+    const button = document.getElementById("place-order-btn");
+
+    if (mpOption) mpOption.style.display = provider === "mercadopago" ? "" : "none";
+    if (paypalOption) paypalOption.style.display = provider === "paypal" ? "" : "none";
+    document.querySelectorAll(".payment-method-option").forEach(option => option.classList.remove("active"));
+
+    const activeOption = provider === "paypal" ? paypalOption : mpOption;
+    if (activeOption) {
+      activeOption.classList.add("active");
+      const input = activeOption.querySelector("input");
+      if (input) input.checked = true;
+    }
+
+    if (mpInfo) mpInfo.style.display = provider === "mercadopago" ? "block" : "none";
+    if (paypalInfo) paypalInfo.style.display = provider === "paypal" ? "block" : "none";
+    if (button) button.textContent = provider === "paypal" ? "Pagar con PayPal" : "Pagar con Mercado Pago";
+  }
+
   function renderSummary() {
-    const el = document.getElementById("checkout-items");
-    if (el) {
-      el.innerHTML = cartItems.map(i => `
+    const provider = paymentProvider();
+    const subtotal = Cart.getSubtotal();
+    const shipping = checkoutType === "digital" ? 0 : (subtotal >= 25 ? 0 : 4.99);
+    const total = subtotal + shipping;
+    const showUsd = provider === "paypal" && exchangeRate;
+
+    const itemsEl = document.getElementById("checkout-items");
+    if (itemsEl) {
+      itemsEl.innerHTML = cartItems.map(item => `
         <div class="checkout-item">
-          <img class="ci-img" src="${i.cover}" alt="${i.title}" loading="lazy" />
+          <img class="ci-img" src="${item.cover}" alt="${item.title}" loading="lazy" />
           <div class="ci-info">
-            <div class="ci-title">${i.title}</div>
-            <div class="ci-qty">x ${i.qty} · ${normalizeFormat(i.format) === "digital" ? "Digital" : "Fisico"}</div>
+            <div class="ci-title">${item.title}</div>
+            <div class="ci-qty">x ${item.qty} - ${normalizeFormat(item.format) === "digital" ? "Digital" : "Fisico"}</div>
           </div>
-          <div class="ci-price">${formatPrice(i.price * i.qty)}</div>
+          <div class="ci-price">${showUsd ? formatUsd((item.price * item.qty) / exchangeRate) : formatArs(item.price * item.qty)}</div>
         </div>
       `).join("") || "<p style='color:var(--color-text-3);font-size:.85rem'>Sin productos</p>";
     }
 
-    const sub = Cart.getSubtotal();
-    const shipping = checkoutType === "digital" ? 0 : (sub >= 25 ? 0 : 4.99);
-    const total = sub + shipping;
-    const s = id => document.getElementById(id);
-    if (s("co-subtotal")) s("co-subtotal").textContent = formatPrice(sub);
-    if (s("co-shipping")) {
-      s("co-shipping").textContent = shipping === 0 ? "GRATIS" : formatPrice(shipping);
-      s("co-shipping").style.color = shipping === 0 ? "var(--color-success)" : "";
+    const subtotalEl = document.getElementById("co-subtotal");
+    const shippingEl = document.getElementById("co-shipping");
+    const totalEl = document.getElementById("co-total");
+    if (subtotalEl) subtotalEl.textContent = showUsd ? formatUsd(subtotal / exchangeRate) : formatArs(subtotal);
+    if (shippingEl) {
+      shippingEl.textContent = shipping === 0 ? "GRATIS" : formatArs(shipping);
+      shippingEl.style.color = shipping === 0 ? "var(--color-success)" : "";
     }
-    if (s("co-total")) s("co-total").textContent = formatPrice(total);
+    if (totalEl) totalEl.textContent = showUsd ? formatUsd(total / exchangeRate) : formatArs(total);
   }
 
-  function goToStep(n) {
+  async function refreshInternationalPricing() {
+    if (paymentProvider() === "paypal") await loadExchangeRate();
+    updatePaymentMethod();
+    renderSummary();
+  }
+
+  function goToStep(nextStep) {
     document.getElementById(`step-${currentStep}`)?.style.setProperty("display", "none");
-    currentStep = n;
+    currentStep = nextStep;
     document.getElementById(`step-${currentStep}`)?.style.setProperty("display", "block");
     for (let i = 1; i <= 2; i++) {
       const btn = document.getElementById(`step-${i}-btn`);
@@ -87,13 +155,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (i === currentStep) btn.classList.add("active");
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function setCheckoutError(message) {
-    const errorBox = document.getElementById("checkout-type-error");
-    if (!errorBox) return;
-    errorBox.textContent = message;
-    errorBox.style.display = message ? "block" : "none";
   }
 
   function validateStep1() {
@@ -112,15 +173,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     let valid = true;
-    fields.forEach(f => {
-      const input = document.getElementById(f.id);
-      const err = document.getElementById(f.errId);
+    fields.forEach(field => {
+      const input = document.getElementById(field.id);
+      const err = document.getElementById(field.errId);
       if (!input) return;
       if (!input.value.trim()) {
         input.classList.add("error");
-        if (err) err.textContent = `${f.label} es requerido`;
+        if (err) err.textContent = `${field.label} es requerido`;
         valid = false;
-      } else if (f.id === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.value)) {
+      } else if (field.id === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.value)) {
         input.classList.add("error");
         if (err) err.textContent = "Email invalido";
         valid = false;
@@ -132,7 +193,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (checkoutType === "fisico") {
       const city = document.getElementById("city")?.value || "";
-      const country = document.getElementById("country")?.value || "";
+      const country = selectedCountry();
       if (!String(city).toLowerCase().includes("tucuman") || country !== "AR") {
         const cityErr = document.getElementById("city-err");
         if (cityErr) cityErr.textContent = "Solo hacemos envios dentro de Tucuman, Argentina";
@@ -176,8 +237,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (orderData.deliveryType === "digital") {
       if (statusEl) statusEl.textContent = "Pago aprobado. Tus archivos ya estan habilitados para descarga.";
       if (downloadsEl) {
+        const token = new URLSearchParams(window.location.search).get("token") || "";
         downloadsEl.innerHTML = (orderData.downloads || []).map(item => `
-          <a class="btn btn-primary btn-full" href="/api/orders/access/${orderData.id}/download/${item.id}?token=${encodeURIComponent(new URLSearchParams(window.location.search).get("token") || "")}">
+          <a class="btn btn-primary btn-full" href="/api/orders/access/${orderData.id}/download/${item.id}?token=${encodeURIComponent(token)}">
             Descargar ${item.title}
           </a>
         `).join("") || "<p>No hay archivos disponibles todavia.</p>";
@@ -189,8 +251,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (physicalEl) physicalEl.style.display = "block";
   }
 
-  document.getElementById("step-1-form")?.addEventListener("submit", e => {
-    e.preventDefault();
+  document.getElementById("step-1-form")?.addEventListener("submit", event => {
+    event.preventDefault();
     if (cartItems.length === 0) {
       Cart.showToast("Agrega al menos un producto al carrito");
       return;
@@ -199,54 +261,37 @@ document.addEventListener("DOMContentLoaded", () => {
       setCheckoutError("Separa los productos digitales de los fisicos antes de pagar.");
       return;
     }
-    if (validateStep1()) {
-      setCheckoutError("");
-      goToStep(2);
-      if (typeof Analytics !== "undefined") Analytics.beginCheckout(cartItems, Cart.getSubtotal());
-    }
+    if (!validateStep1()) return;
+
+    setCheckoutError("");
+    refreshInternationalPricing()
+      .then(() => {
+        goToStep(2);
+        if (typeof Analytics !== "undefined") Analytics.beginCheckout(cartItems, Cart.getSubtotal());
+      })
+      .catch(error => setCheckoutError(error.message));
   });
 
   document.getElementById("back-to-step1")?.addEventListener("click", () => goToStep(1));
 
-  document.querySelectorAll(".payment-method-option").forEach(opt => {
-    opt.addEventListener("click", () => {
-      document.querySelectorAll(".payment-method-option").forEach(o => o.classList.remove("active"));
-      opt.classList.add("active");
-      opt.querySelector("input").checked = true;
-      const val = opt.querySelector("input").value;
-      const cardFormEl = document.getElementById("card-form");
-      const paypalInfoEl = document.getElementById("paypal-info");
-      const mpInfoEl = document.getElementById("mp-info");
-      if (cardFormEl) cardFormEl.style.display = "none";
-      if (paypalInfoEl) paypalInfoEl.style.display = "none";
-      if (mpInfoEl) mpInfoEl.style.display = val === "mercadopago" || val === "card" ? "block" : "none";
-    });
+  document.querySelectorAll(".payment-method-option").forEach(option => {
+    option.addEventListener("click", () => updatePaymentMethod());
   });
 
-  const cardForm = document.getElementById("card-form");
-  if (cardForm) cardForm.style.display = "none";
-  const mpInfo = document.getElementById("mp-info");
-  if (mpInfo) {
-    mpInfo.style.display = "block";
-    mpInfo.querySelector("p").textContent = "Vas a ser redirigido a Mercado Pago Checkout Pro para pagar de forma segura.";
-  }
-  const placeOrderBtn = document.getElementById("place-order-btn");
-  if (placeOrderBtn) placeOrderBtn.textContent = "Pagar con Mercado Pago";
-  document.querySelector("input[name='payment'][value='mercadopago']")?.click();
-
-  placeOrderBtn?.addEventListener("click", async () => {
+  document.getElementById("place-order-btn")?.addEventListener("click", async () => {
     const terms = document.getElementById("accept-terms");
     if (!terms?.checked) {
       Cart.showToast("Acepta los terminos para continuar");
       return;
     }
 
+    const provider = paymentProvider();
     const btn = document.getElementById("place-order-btn");
     btn.textContent = "Creando pago...";
     btn.disabled = true;
 
     try {
-      const response = await fetch("/api/checkout/mercadopago", {
+      const response = await fetch(provider === "paypal" ? "/api/checkout/paypal" : "/api/checkout/mercadopago", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -264,7 +309,10 @@ document.addEventListener("DOMContentLoaded", () => {
             address: document.getElementById("address")?.value || "",
             city: document.getElementById("city")?.value || "",
             zip: document.getElementById("zip")?.value || "",
-            country: document.getElementById("country")?.value || "AR"
+            country: selectedCountry()
+          },
+          billing: {
+            country: selectedCountry()
           }
         })
       });
@@ -272,10 +320,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!response.ok) throw new Error(data.error || "No se pudo crear el pago");
 
       if (typeof Analytics !== "undefined") Analytics.purchase(data.orderId, cartItems, Cart.getSubtotal());
-      window.location.href = data.initPoint || data.sandboxInitPoint;
+      window.location.href = data.approveUrl || data.initPoint || data.sandboxInitPoint;
     } catch (error) {
       Cart.showToast(error.message);
-      btn.textContent = "Pagar con Mercado Pago";
+      updatePaymentMethod();
       btn.disabled = false;
     }
   });
@@ -310,6 +358,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  document.getElementById("country")?.addEventListener("change", () => {
+    setCheckoutError("");
+    refreshInternationalPricing().catch(error => setCheckoutError(error.message));
+  });
+
   if (checkoutType === "mixed") {
     setCheckoutError("No se pueden pagar juntos productos digitales y fisicos. Separa las compras.");
   }
@@ -319,5 +372,5 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   formatSectionForType();
-  renderSummary();
+  refreshInternationalPricing().catch(error => setCheckoutError(error.message));
 });
