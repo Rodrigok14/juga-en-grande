@@ -199,6 +199,48 @@ async function paypalRequest(pathname, options = {}) {
   return data;
 }
 
+async function fetchMercadoPagoPayment(paymentId) {
+  if (!paymentId || !process.env.MP_ACCESS_TOKEN) return null;
+  const client = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN });
+  const payment = new Payment(client);
+  return payment.get({ id: paymentId });
+}
+
+async function searchMercadoPagoPaymentByOrder(orderId) {
+  if (!orderId || !process.env.MP_ACCESS_TOKEN) return null;
+  const response = await fetch(`https://api.mercadopago.com/v1/payments/search?external_reference=${encodeURIComponent(orderId)}&sort=date_created&criteria=desc`, {
+    headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}` }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.message || data.error || "No se pudo consultar Mercado Pago");
+  }
+  return (data.results || [])[0] || null;
+}
+
+async function applyMercadoPagoPayment(data, baseUrl) {
+  if (!data?.external_reference) return null;
+  const orderId = data.external_reference;
+  await pool.query(`
+    UPDATE orders
+    SET status = $1, mp_payment_id = $2, updated_at = CURRENT_TIMESTAMP
+    WHERE id = $3
+  `, [data.status || "unknown", String(data.id || ""), orderId]);
+  if (data.status === "approved") {
+    await fulfillApprovedOrder(orderId, baseUrl);
+  }
+  return orderId;
+}
+
+async function reconcileMercadoPagoOrder(order, baseUrl) {
+  if (!order || order.status === "approved" || order.payment_provider !== "mercadopago") return order;
+  const payment = await searchMercadoPagoPaymentByOrder(order.id);
+  if (!payment) return order;
+  await applyMercadoPagoPayment(payment, baseUrl);
+  const { rows } = await pool.query("SELECT * FROM orders WHERE id = $1", [order.id]);
+  return rows[0] || order;
+}
+
 function amountToUsd(arsCents, usdArsRate) {
   return (Number(arsCents || 0) / 100 / usdArsRate).toFixed(2);
 }
@@ -1211,8 +1253,9 @@ app.get("/api/orders/access/:id", async (req, res) => {
     const accessToken = String(req.query.token || "");
     if (!accessToken) return res.status(400).json({ error: "Falta token de acceso" });
 
-    const order = await loadOrderWithToken(req.params.id, accessToken);
+    let order = await loadOrderWithToken(req.params.id, accessToken);
     if (!order) return res.status(404).json({ error: "Pedido no encontrado" });
+    order = await reconcileMercadoPagoOrder(order, requestBaseUrl(req));
 
     const response = {
       id: order.id,
@@ -1762,25 +1805,15 @@ app.get("/api/checkout/paypal/return", async (req, res) => {
 });
 
 app.post("/api/webhooks/mercadopago", async (req, res) => {
-  res.status(200).json({ received: true });
   try {
     const paymentId = req.body?.data?.id || req.query["data.id"];
-    if (!paymentId || !process.env.MP_ACCESS_TOKEN) return;
-    const client = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN });
-    const payment = new Payment(client);
-    const data = await payment.get({ id: paymentId });
-    const orderId = data.external_reference;
-    if (!orderId) return;
-    await pool.query(`
-      UPDATE orders
-      SET status = $1, mp_payment_id = $2, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $3
-    `, [data.status || "unknown", String(paymentId), orderId]);
-    if (data.status === "approved") {
-      await fulfillApprovedOrder(orderId, requestBaseUrl(req));
-    }
+    if (!paymentId || !process.env.MP_ACCESS_TOKEN) return res.status(200).json({ received: true, skipped: true });
+    const data = await fetchMercadoPagoPayment(paymentId);
+    await applyMercadoPagoPayment(data, requestBaseUrl(req));
+    res.status(200).json({ received: true });
   } catch (error) {
     console.error("Mercado Pago webhook error", error);
+    res.status(200).json({ received: true, error: "webhook_processing_failed" });
   }
 });
 
