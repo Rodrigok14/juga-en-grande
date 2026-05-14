@@ -2,7 +2,8 @@ const state = {
   products: [],
   combos: [],
   orders: [],
-  customers: []
+  customers: [],
+  requests: []
 };
 
 const $ = selector => document.querySelector(selector);
@@ -53,6 +54,7 @@ function bindTabs() {
       $(`#tab-${tab.dataset.tab}`).classList.add("active");
       if (tab.dataset.tab === "orders") loadOrders();
       if (tab.dataset.tab === "customers") loadCustomers();
+      if (tab.dataset.tab === "requests") loadRequests();
     });
   });
 }
@@ -64,6 +66,7 @@ function bindModals() {
   $("#new-combo-btn")?.addEventListener("click", () => openComboModal());
   $("#refresh-orders-btn")?.addEventListener("click", loadOrders);
   $("#refresh-customers-btn")?.addEventListener("click", loadCustomers);
+  $("#refresh-requests-btn")?.addEventListener("click", loadRequests);
 }
 
 function bindForms() {
@@ -102,6 +105,12 @@ async function loadCustomers() {
   renderCustomers();
 }
 
+async function loadRequests() {
+  const data = await api("/api/book-requests");
+  state.requests = data.requests;
+  renderRequests();
+}
+
 function renderProducts() {
   $("#products-table").innerHTML = state.products.map(product => `
     <tr>
@@ -112,6 +121,7 @@ function renderProducts() {
             <strong>${escapeHtml(product.title)}</strong>
             <div class="admin-muted">${escapeHtml(product.author || "")}</div>
             ${product.hasDigitalFile ? `<div class="admin-muted">Archivo digital cargado</div>` : ""}
+            ${product.hasPreview ? `<div class="admin-muted">Muestra de lectura disponible</div>` : ""}
           </div>
         </div>
       </td>
@@ -220,6 +230,25 @@ function renderCustomers() {
   }).join("") || `<tr><td colspan="5" class="admin-muted">Todavia no hay clientes aprobados.</td></tr>`;
 }
 
+function renderRequests() {
+  const table = $("#requests-table");
+  if (!table) return;
+  table.innerHTML = state.requests.map(request => `
+    <tr>
+      <td>
+        <strong>${escapeHtml(request.requestedTitle || "-")}</strong>
+        <div class="admin-muted">${escapeHtml(request.requestedAuthor || "")}</div>
+      </td>
+      <td>
+        <strong>${escapeHtml(request.name || "Anonimo")}</strong>
+        <div class="admin-muted">${escapeHtml(request.email || "")}</div>
+      </td>
+      <td>${escapeHtml(request.notes || "Sin detalle adicional.")}</td>
+      <td>${new Date(request.createdAt).toLocaleString("es-AR")}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="4" class="admin-muted">Todavia no hay sugerencias cargadas.</td></tr>`;
+}
+
 function openProductModal(product = null) {
   $("#product-form").reset();
   $("#product-id").value = product?.id || "";
@@ -236,8 +265,8 @@ function openProductModal(product = null) {
   $("#product-active").value = product?.active === false ? "0" : "1";
   $("#product-description").value = product?.description || product?.synopsis || "";
   $("#product-digital-file-status").textContent = product?.digitalFileName
-    ? `Archivo actual: ${product.digitalFileName}`
-    : "Sin archivo digital cargado.";
+    ? `Archivo actual: ${product.digitalFileName}${product?.hasPreview ? " • muestra de lectura lista" : " • sin muestra automática"}`
+    : "Sin archivo digital cargado. Si subes un PDF, la muestra de 3 páginas se genera automáticamente.";
   $("#product-modal").showModal();
 }
 

@@ -1,16 +1,14 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Jugá en Grande | Aprendé. Crecé. Ganá.</title>
-  <meta name="description" content="Libros y guías para mejorar tu mentalidad, aprender finanzas, vender más y convertir conocimiento en dinero." />
-  <meta name="keywords" content="educación financiera, crecimiento personal, libros de dinero, mentalidad de éxito, productividad, ventas" />
-
+  <meta name="description" content="Libros y packs digitales para mejorar mentalidad, finanzas, ventas y productividad. Compra online, descarga inmediata o entrega física en San Miguel de Tucumán." />
+  <meta name="keywords" content="libros digitales, educación financiera, crecimiento personal, ventas, productividad, libros en tucumán" />
   <meta property="og:title" content="Jugá en Grande | Convertí conocimiento en dinero" />
-  <meta property="og:description" content="No son solo libros. Son herramientas para transformar tu vida." />
+  <meta property="og:description" content="Packs digitales con descarga inmediata y libros físicos en Tucumán." />
   <meta property="og:type" content="website" />
-
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -20,7 +18,6 @@
     "priceRange": "$$"
   }
   </script>
-
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -45,7 +42,9 @@
 
       <div class="nav-actions">
         <a href="#featured-books" class="nav-link">Libros</a>
+        <a href="#reading-preview" class="nav-link">Muestra</a>
         <a href="#interactive" class="nav-link">Recomendador</a>
+        <a href="#support" class="nav-link">Soporte</a>
         <a href="catalogo.html" class="nav-link">Catálogo</a>
         <button class="nav-icon-btn cart-btn" id="cart-btn" aria-label="Carrito de compras">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
@@ -59,51 +58,66 @@
 
     <div class="mobile-menu" id="mobile-menu">
       <a href="#featured-books">Libros</a>
+      <a href="#reading-preview">Muestra</a>
       <a href="#interactive">Recomendador</a>
+      <a href="#support">Soporte</a>
       <a href="catalogo.html">Catálogo</a>
       <a href="carrito.html">Carrito</a>
     </div>
   </nav>
 
   <div class="announcement-bar" id="announcement-bar">
-    <p><strong>Nuevo:</strong> colecciones para ganar más, vender mejor y construir una mente más rentable.</p>
+    <p><strong>Nuevo:</strong> packs digitales con descarga automática y soporte directo por WhatsApp.</p>
     <button class="announcement-close" id="ann-close" aria-label="Cerrar">×</button>
   </div>
 
   <main>
+    <section class="books-section section-padding section-first" id="featured-books">
+      <div class="container">
+        <div class="section-header-row">
+          <div>
+            <div class="section-label">Catálogo principal</div>
+            <h2 class="section-title">Entrá directo a los libros</h2>
+            <p class="section-subtitle">La home prioriza producto primero. Los packs digitales aparecen antes para que el cliente vea rápido qué puede comprar y descargar hoy mismo.</p>
+          </div>
+          <a href="catalogo.html" class="see-all-link">Ver catálogo completo</a>
+        </div>
+        <div class="books-carousel premium-books" id="featured-books-grid"></div>
+      </div>
+    </section>
+
     <section class="hero" id="hero">
       <div class="hero-grid-bg"></div>
       <div class="hero-glow hero-glow-one"></div>
       <div class="hero-glow hero-glow-two"></div>
-
       <div class="container hero-layout">
         <div class="hero-content">
           <div class="brand-kicker">Aprendé. Crecé. Ganá.</div>
-          <h1 class="hero-title">Aprendé, cambiá tu mentalidad y empezá a ganar más dinero</h1>
-          <p class="hero-subtitle">No son solo libros. Son herramientas para transformar tu vida y convertir conocimiento en dinero.</p>
+          <h1 class="hero-title">Lecturas para vender más, pensar mejor y ganar más dinero</h1>
+          <p class="hero-subtitle">No vendemos libros al peso. Vendemos conocimiento útil, bien curado y listo para convertir en acción. Digitales para Argentina y exterior. Físicos solo en San Miguel de Tucumán.</p>
           <div class="hero-actions">
-            <a href="#featured-books" class="btn btn-primary btn-large">Empezar ahora</a>
-            <a href="#interactive" class="btn btn-secondary btn-large">Decime qué querés lograr</a>
+            <a href="#featured-books" class="btn btn-primary btn-large">Ver libros ahora</a>
+            <a href="#support" class="btn btn-secondary btn-large">Hablar por WhatsApp</a>
           </div>
           <div class="hero-delivery-note">
-            <strong>Digitales:</strong> descarga inmediata post-pago para Argentina y exterior.
+            <strong>Digitales:</strong> descarga inmediata post-pago por Mercado Pago o PayPal.
             <span>Físicos: entrega solo en San Miguel de Tucumán.</span>
           </div>
-          <div class="hero-metrics" aria-label="Indicadores de transformación">
-            <div><strong>12k+</strong><span>lectores activos</span></div>
-            <div><strong>4.9/5</strong><span>valoración media</span></div>
-            <div><strong>30 días</strong><span>plan de acción</span></div>
+          <div class="hero-metrics" aria-label="Indicadores de conversión">
+            <div><strong>Digital</strong><span>compra y descarga</span></div>
+            <div><strong>Exterior</strong><span>paga en USD con PayPal</span></div>
+            <div><strong>Tucumán</strong><span>entrega física local</span></div>
           </div>
         </div>
 
-        <div class="hero-visual" aria-label="Marca Jugá en Grande con gráfico ascendente">
+        <div class="hero-visual" aria-label="Marca Jugá en Grande con crecimiento comercial">
           <div class="hero-logo-card">
             <img src="assets/logo-primary.svg" alt="Jugá en Grande" />
-            <p>Convertí conocimiento en dinero</p>
+            <p>Conocimiento accionable para lectores con ambición.</p>
           </div>
           <div class="growth-panel">
             <div class="growth-header">
-              <span>Progreso mental</span>
+              <span>Conversión por claridad</span>
               <strong>+247%</strong>
             </div>
             <div class="growth-chart">
@@ -121,8 +135,8 @@
           <div class="mentor-card">
             <div class="mentor-avatar"></div>
             <div>
-              <strong>Tu mente es tu activo más rentable.</strong>
-              <span>No leas más. Leé mejor.</span>
+              <strong>Mostrá el libro antes de pedir la tarjeta.</strong>
+              <span>Producto visible, muestra visible, soporte visible.</span>
             </div>
           </div>
         </div>
@@ -132,25 +146,25 @@
     <section class="digital-access section-padding" id="digital-access">
       <div class="container digital-access-layout">
         <div>
-          <div class="section-label">Packs digitales</div>
-          <h2 class="section-title">Compra desde cualquier país y descarga al aprobarse el pago</h2>
-          <p class="section-subtitle">Los productos digitales se habilitan automáticamente después de la confirmación de Mercado Pago o PayPal.</p>
+          <div class="section-label">Cómo se compra</div>
+          <h2 class="section-title">Compra desde cualquier país y descargá al aprobarse el pago</h2>
+          <p class="section-subtitle">Los productos digitales se habilitan automáticamente después de la confirmación. La experiencia cambia según país para reducir fricción en el pago.</p>
         </div>
         <div class="digital-access-grid">
           <article class="digital-access-card is-primary">
             <span>01</span>
             <h3>Argentina</h3>
-            <p>Pagás en pesos con Mercado Pago y recibís la descarga del pack digital.</p>
+            <p>Pagás en pesos con Mercado Pago y recibís el pack digital por descarga y por email.</p>
           </article>
           <article class="digital-access-card">
             <span>02</span>
             <h3>Exterior</h3>
-            <p>La web convierte el precio a USD y te envía a PayPal.</p>
+            <p>La web convierte el precio a USD y te envía a PayPal para cerrar la compra.</p>
           </article>
           <article class="digital-access-card">
             <span>03</span>
             <h3>Físicos</h3>
-            <p>Los libros impresos se entregan solo dentro de San Miguel de Tucumán.</p>
+            <p>Los libros impresos se muestran, pero se entregan solo en San Miguel de Tucumán.</p>
           </article>
         </div>
       </div>
@@ -166,38 +180,25 @@
         <div class="transformation-grid">
           <article class="transformation-card">
             <span>01</span>
-            <h3>Libros que transforman</h3>
-            <p>Ideas seleccionadas por impacto práctico, no por moda.</p>
+            <h3>Producto visible</h3>
+            <p>La tienda muestra los libros antes que cualquier discurso institucional.</p>
           </article>
           <article class="transformation-card">
             <span>02</span>
-            <h3>Mentalidad ganadora</h3>
-            <p>Lecturas para decidir con claridad, foco y ambición.</p>
+            <h3>Muestra antes de pagar</h3>
+            <p>El lector puede leer 3 páginas si el producto digital tiene PDF.</p>
           </article>
           <article class="transformation-card">
             <span>03</span>
-            <h3>Educación que paga</h3>
-            <p>Finanzas, negocio y ventas aplicables a la vida real.</p>
+            <h3>Soporte directo</h3>
+            <p>WhatsApp visible para cerrar dudas comerciales o de acceso.</p>
           </article>
           <article class="transformation-card">
             <span>04</span>
-            <h3>Acción con resultados</h3>
-            <p>Recomendaciones conectadas a objetivos concretos.</p>
+            <h3>Demanda capturada</h3>
+            <p>Los lectores te dicen qué títulos o temas quieren comprar después.</p>
           </article>
         </div>
-      </div>
-    </section>
-
-    <section class="books-section section-padding" id="featured-books">
-      <div class="container">
-        <div class="section-header-row">
-          <div>
-            <div class="section-label">Libros destacados</div>
-            <h2 class="section-title">Lecturas para jugar en grande</h2>
-          </div>
-          <a href="catalogo.html" class="see-all-link">Ver catálogo completo</a>
-        </div>
-        <div class="books-carousel premium-books" id="featured-books-grid"></div>
       </div>
     </section>
 
@@ -233,6 +234,80 @@
       </div>
     </section>
 
+    <section class="reading-preview section-padding" id="reading-preview">
+      <div class="container reading-preview-layout">
+        <div>
+          <div class="section-label">Muestra de lectura</div>
+          <h2 class="section-title">Dale al lector una razón para quedarse 3 páginas más</h2>
+          <p class="section-subtitle">Como en una biblioteca digital bien resuelta, los productos con PDF pueden mostrar una muestra corta antes de comprar. Esto baja fricción y mejora conversión.</p>
+          <ul class="preview-points">
+            <li>Reduce abandono en productos digitales.</li>
+            <li>Hace que el cliente compre por contenido, no solo por portada.</li>
+            <li>Refuerza percepción premium y confianza.</li>
+          </ul>
+        </div>
+        <div class="preview-card">
+          <span class="preview-pill">NUEVO</span>
+          <h3>Ver muestra antes de comprar</h3>
+          <p>Los destacados digitales con muestra muestran el botón <strong>Leer muestra</strong>. En la ficha del producto se abre una vista de lectura con las primeras 3 páginas.</p>
+          <a href="producto.html?slug=robert" class="btn btn-primary">Probar con el pack digital</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="support-section section-padding" id="support">
+      <div class="container support-layout">
+        <div>
+          <div class="section-label">Soporte directo</div>
+          <h2 class="section-title">Si el cliente tiene una duda, que te escriba sin buscar demasiado</h2>
+          <p class="section-subtitle">Soporte comercial, consultas sobre pagos, descarga de packs y libros físicos en Tucumán. El objetivo es bajar abandono y cerrar ventas más rápido.</p>
+        </div>
+        <div class="support-card">
+          <div class="support-number">3816590235</div>
+          <p>WhatsApp comercial para resolver compras, acceso a descargas y consultas sobre entregas en San Miguel de Tucumán.</p>
+          <a class="btn btn-primary btn-large" href="https://wa.me/543816590235?text=Hola%20Rodrigo,%20quiero%20ayuda%20con%20un%20libro%20de%20Juga%20en%20Grande" target="_blank" rel="noopener noreferrer">Hablar por WhatsApp</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="request-section section-padding" id="request-books">
+      <div class="container request-layout">
+        <div>
+          <div class="section-label">Demanda del mercado</div>
+          <h2 class="section-title">Que los lectores te digan qué libro digital quieren comprar</h2>
+          <p class="section-subtitle">Esto sirve para validar nuevos packs y detectar autores o temas con demanda real antes de cargar más productos.</p>
+        </div>
+        <form class="request-form" id="book-request-form">
+          <div class="request-grid">
+            <label>
+              Nombre
+              <input type="text" id="request-name" name="name" placeholder="Tu nombre" />
+            </label>
+            <label>
+              Email (opcional)
+              <input type="email" id="request-email" name="email" placeholder="tu@email.com" />
+            </label>
+            <label class="request-full">
+              Libro, autor o tema que querés ver
+              <input type="text" id="request-title" name="requestedTitle" placeholder="Ej: cierres de ventas, Jordan Belfort, inversiones..." required />
+            </label>
+            <label>
+              Autor (opcional)
+              <input type="text" id="request-author" name="requestedAuthor" placeholder="Autor sugerido" />
+            </label>
+            <label class="request-full">
+              Comentario
+              <textarea id="request-notes" name="notes" rows="4" placeholder="Contanos por qué te interesaría este libro o pack."></textarea>
+            </label>
+          </div>
+          <div class="request-actions">
+            <button type="submit" class="btn btn-primary">Enviar sugerencia</button>
+            <p class="request-feedback" id="book-request-feedback">Si dejás tu email, después podés avisarle cuando el libro entre a la tienda.</p>
+          </div>
+        </form>
+      </div>
+    </section>
+
     <section class="reviews-section section-padding" id="social-proof">
       <div class="container">
         <div class="section-header center">
@@ -258,7 +333,7 @@
         </div>
         <div class="final-cta-actions">
           <a href="catalogo.html" class="btn btn-primary btn-large">Ver libros</a>
-          <a href="#interactive" class="btn btn-outline btn-large">Empezar ahora</a>
+          <a href="#support" class="btn btn-outline btn-large">Necesito ayuda</a>
         </div>
       </div>
     </section>
@@ -287,16 +362,18 @@
           <h4>Marca</h4>
           <ul>
             <li><a href="#transformation">Transformación</a></li>
-            <li><a href="#interactive">Recomendador</a></li>
+            <li><a href="#reading-preview">Muestra</a></li>
+            <li><a href="#support">Soporte</a></li>
             <li><a href="#social-proof">Resultados</a></li>
             <li style="margin-top: 15px;"><a href="admin.html" style="color: var(--color-accent); font-weight: bold; padding: 5px 10px; border: 1px solid var(--color-accent); border-radius: 5px; display: inline-block;">Acceso Admin</a></li>
           </ul>
         </div>
         <div class="footer-col">
-          <h4>Mensaje</h4>
+          <h4>Contacto</h4>
           <ul>
-            <li>Aprendé. Crecé. Ganá.</li>
-            <li>Convertí conocimiento en dinero.</li>
+            <li><a href="https://wa.me/543816590235?text=Hola%20Rodrigo,%20quiero%20ayuda%20con%20un%20libro%20de%20Juga%20en%20Grande" target="_blank" rel="noopener noreferrer">WhatsApp 3816590235</a></li>
+            <li>Físicos solo en San Miguel de Tucumán</li>
+            <li>Digitales con descarga automática</li>
           </ul>
         </div>
       </div>

@@ -1,4 +1,4 @@
-document.addEventListener("DOMContentLoaded", () => {
+﻿document.addEventListener("DOMContentLoaded", () => {
   const navbar = document.getElementById("navbar");
   window.addEventListener("scroll", () => {
     navbar?.classList.toggle("scrolled", window.scrollY > 40);
@@ -38,30 +38,30 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 180);
   });
 
-  navInput?.addEventListener("keydown", e => {
-    if (e.key === "Enter" && navInput.value.trim()) {
+  navInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter" && navInput.value.trim()) {
       window.location.href = "catalogo.html?q=" + encodeURIComponent(navInput.value.trim());
     }
-    if (e.key === "Escape") navDropdown?.classList.remove("open");
+    if (event.key === "Escape") navDropdown?.classList.remove("open");
   });
 
-  document.addEventListener("click", e => {
-    if (!e.target.closest(".search-bar-nav")) navDropdown?.classList.remove("open");
+  document.addEventListener("click", event => {
+    if (!event.target.closest(".search-bar-nav")) navDropdown?.classList.remove("open");
   });
 
-  function renderSearchDropdown(results, q) {
+  function renderSearchDropdown(results, query) {
     if (!navDropdown) return;
     navDropdown.innerHTML = results.length
-      ? results.map(b => `
-          <div class="search-result-item" onclick="window.location.href='producto.html?slug=${b.slug}'">
-            <img class="search-result-thumb" src="${b.cover}" alt="${b.title}" loading="lazy" />
+      ? results.map(book => `
+          <div class="search-result-item" onclick="window.location.href='producto.html?slug=${book.slug}'">
+            <img class="search-result-thumb" src="${book.cover}" alt="${book.title}" loading="lazy" />
             <div class="search-result-info">
-              <strong>${b.title}</strong>
-              <span>${b.author} · ${formatPrice(b.price)}</span>
+              <strong>${book.title}</strong>
+              <span>${book.author} · ${formatPrice(book.price)}</span>
             </div>
           </div>
         `).join("")
-      : `<div class="search-result-item"><div class="search-result-info"><strong>Sin resultados para "${q}"</strong><span>Probá con dinero, mentalidad, ventas o foco.</span></div></div>`;
+      : `<div class="search-result-item"><div class="search-result-info"><strong>Sin resultados para \"${escapeHtml(query)}\"</strong><span>Probá con dinero, ventas, mentalidad o foco.</span></div></div>`;
     navDropdown.classList.add("open");
   }
 
@@ -72,68 +72,17 @@ document.addEventListener("DOMContentLoaded", () => {
     { id: "productividad", name: "Productividad", code: "P", count: "Foco y ejecución", color: "#FFFFFF" }
   ];
 
-  const catGrid = document.getElementById("categories-grid");
-  if (catGrid) {
-    catGrid.innerHTML = categories.map(c => `
-      <a href="catalogo.html?cat=${c.id}" class="category-card" style="--cat-color:${c.color}">
-        <div class="category-icon">${c.code}</div>
+  const categoryGrid = document.getElementById("categories-grid");
+  if (categoryGrid) {
+    categoryGrid.innerHTML = categories.map(category => `
+      <a href="catalogo.html?cat=${category.id}" class="category-card" style="--cat-color:${category.color}">
+        <div class="category-icon">${category.code}</div>
         <div>
-          <div class="category-name">${c.name}</div>
-          <div class="category-count">${c.count}</div>
+          <div class="category-name">${category.name}</div>
+          <div class="category-count">${category.count}</div>
         </div>
       </a>
     `).join("");
-  }
-
-  function bookCardHTML(b) {
-    const discount = b.oldPrice ? Math.round((1 - b.price / b.oldPrice) * 100) : null;
-    const categoryName = categoryLabel(b.category);
-    const isDigital = b.format === "digital";
-    return `
-      <article class="book-card ${isDigital ? "is-digital" : ""}" onclick="window.location.href='producto.html?slug=${b.slug}'" style="cursor:pointer">
-        <div class="book-card-cover">
-          ${isDigital ? `<span class="book-badge">Descarga digital</span>` : ""}
-          ${!isDigital && b.badge ? `<span class="book-badge ${b.badge === "sale" ? "badge-sale" : b.badge === "new" ? "badge-new" : ""}">${badgeLabel(b.badge)}</span>` : ""}
-          <button class="book-wishlist-btn" onclick="event.stopPropagation(); toggleWishlist(${b.id}, this)" aria-label="Guardar en favoritos">♡</button>
-          <img src="${b.cover}" alt="Portada de ${b.title}" loading="lazy" />
-          <div class="book-card-quick-add">
-            <button data-add-to-cart="${b.id}" onclick="event.stopPropagation()">Añadir al carrito</button>
-          </div>
-        </div>
-        <div class="book-card-body">
-          <div class="book-category">${categoryName}</div>
-          <div class="book-title">${b.title}</div>
-          <div class="book-author">${b.author}</div>
-          <div class="book-impact">${impactLine(b)}</div>
-          <div class="book-stars">
-            <span class="stars">★★★★★</span>
-            <span class="count">(${b.reviews.toLocaleString()})</span>
-          </div>
-          <div class="book-price-row">
-            <span class="book-price">${formatPrice(b.price)}</span>
-            ${b.oldPrice ? `<span class="book-price-old">${formatPrice(b.oldPrice)}</span>` : ""}
-            ${discount ? `<span class="book-badge badge-sale" style="position:static">-${discount}%</span>` : ""}
-            <span class="book-format-tag">${b.format === "digital" ? "Digital" : "Físico"}</span>
-          </div>
-        </div>
-      </article>
-    `;
-  }
-
-  const featuredGrid = document.getElementById("featured-books-grid");
-  if (featuredGrid) {
-    const priority = ["robert", "deep-work", "padre-rico-padre-pobre", "piense-y-hagase-rico", "atomic-habits"];
-    const priorityBooks = priority.map(slug => getBookBySlug(slug)).filter(Boolean);
-    const digitalBooks = BOOKS.filter(book => book.format === "digital" && !priorityBooks.some(item => item.id === book.id));
-    const books = [...priorityBooks.filter(book => book.format === "digital"), ...digitalBooks, ...priorityBooks.filter(book => book.format !== "digital")].slice(0, 4);
-    featuredGrid.innerHTML = books.map(bookCardHTML).join("");
-  }
-
-  function badgeLabel(badge) {
-    if (badge === "bestseller") return "Best seller";
-    if (badge === "new") return "Nuevo";
-    if (badge === "sale") return "Oferta";
-    return badge;
   }
 
   function categoryLabel(category) {
@@ -148,29 +97,99 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function impactLine(book) {
-    const text = {
+    const lines = {
+      robert: "Pack digital listo para descargar apenas se aprueba el pago.",
       "padre-rico-padre-pobre": "Aprendé a pensar como dueño de activos.",
       "piense-y-hagase-rico": "Entrená tu ambición con principios de riqueza.",
       "atomic-habits": "Construí sistemas que te acerquen al resultado.",
       "deep-work": "Recuperá foco para producir trabajo de alto valor."
     };
-    return text[book.slug] || "Una lectura para tomar mejores decisiones.";
+    return lines[book.slug] || "Una lectura para tomar mejores decisiones.";
   }
 
-  window.toggleWishlist = (id, btn) => {
+  function badgeLabel(badge) {
+    if (badge === "bestseller") return "Best seller";
+    if (badge === "new") return "Nuevo";
+    if (badge === "sale") return "Oferta";
+    return badge || "";
+  }
+
+  const previewModal = createPreviewModal();
+  window.openBookPreview = bookId => {
+    const book = getBookById(Number(bookId));
+    if (!book?.hasPreview || !book.previewUrl) return;
+    previewModal.open(book);
+  };
+
+  window.toggleWishlist = (id, button) => {
     const key = "jg_wishlist";
     let wishlist = JSON.parse(localStorage.getItem(key) || "[]");
     if (wishlist.includes(id)) {
       wishlist = wishlist.filter(item => item !== id);
-      btn.textContent = "♡";
-      btn.classList.remove("active");
+      button.textContent = "♡";
+      button.classList.remove("active");
     } else {
       wishlist.push(id);
-      btn.textContent = "♥";
-      btn.classList.add("active");
+      button.textContent = "♥";
+      button.classList.add("active");
     }
     localStorage.setItem(key, JSON.stringify(wishlist));
   };
+
+  function bookCardHTML(book) {
+    const discount = book.oldPrice ? Math.round((1 - book.price / book.oldPrice) * 100) : null;
+    const isDigital = book.format === "digital";
+    const previewButton = book.hasPreview
+      ? `<button class="book-inline-action" onclick="event.stopPropagation(); openBookPreview(${book.id})">Leer muestra</button>`
+      : "";
+
+    return `
+      <article class="book-card ${isDigital ? "is-digital" : ""}" onclick="window.location.href='producto.html?slug=${book.slug}'" style="cursor:pointer">
+        <div class="book-card-cover">
+          ${isDigital ? `<span class="book-badge">Descarga digital</span>` : ""}
+          ${!isDigital && book.badge ? `<span class="book-badge ${book.badge === "sale" ? "badge-sale" : book.badge === "new" ? "badge-new" : ""}">${badgeLabel(book.badge)}</span>` : ""}
+          <button class="book-wishlist-btn" onclick="event.stopPropagation(); toggleWishlist(${book.id}, this)" aria-label="Guardar en favoritos">♡</button>
+          <img src="${book.cover}" alt="Portada de ${book.title}" loading="lazy" />
+          <div class="book-card-quick-add">
+            <button data-add-to-cart="${book.id}" onclick="event.stopPropagation()">Añadir al carrito</button>
+          </div>
+        </div>
+        <div class="book-card-body">
+          <div class="book-category">${categoryLabel(book.category)}</div>
+          <div class="book-title">${book.title}</div>
+          <div class="book-author">${book.author}</div>
+          <div class="book-impact">${impactLine(book)}</div>
+          <div class="book-stars">
+            <span class="stars">★★★★★</span>
+            <span class="count">(${book.reviews.toLocaleString()})</span>
+          </div>
+          <div class="book-price-row">
+            <span class="book-price">${formatPrice(book.price)}</span>
+            ${book.oldPrice ? `<span class="book-price-old">${formatPrice(book.oldPrice)}</span>` : ""}
+            ${discount ? `<span class="book-badge badge-sale" style="position:static">-${discount}%</span>` : ""}
+            <span class="book-format-tag">${isDigital ? "Digital" : "Físico"}</span>
+          </div>
+          <div class="book-inline-actions">
+            ${previewButton}
+            <a class="book-inline-link" href="producto.html?slug=${book.slug}" onclick="event.stopPropagation()">Ver ficha</a>
+          </div>
+        </div>
+      </article>
+    `;
+  }
+
+  const featuredGrid = document.getElementById("featured-books-grid");
+  if (featuredGrid) {
+    const priority = ["robert", "deep-work", "padre-rico-padre-pobre", "piense-y-hagase-rico", "atomic-habits"];
+    const priorityBooks = priority.map(slug => getBookBySlug(slug)).filter(Boolean);
+    const digitalBooks = BOOKS.filter(book => book.format === "digital" && !priorityBooks.some(item => item.id === book.id));
+    const books = [
+      ...priorityBooks.filter(book => book.format === "digital"),
+      ...digitalBooks,
+      ...priorityBooks.filter(book => book.format !== "digital")
+    ].slice(0, 8);
+    featuredGrid.innerHTML = books.map(bookCardHTML).join("");
+  }
 
   const recommendations = [
     {
@@ -212,7 +231,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function recommend() {
     if (!recommendationCard) return;
     const value = (goalInput?.value || "").toLowerCase();
-    const match = recommendations.find(r => r.keys.some(k => value.includes(k))) || recommendations[0];
+    const match = recommendations.find(item => item.keys.some(key => value.includes(key))) || recommendations[0];
     recommendationCard.innerHTML = `
       <span>Recomendación para tu objetivo</span>
       <h3>${match.title}</h3>
@@ -226,8 +245,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   goalButton?.addEventListener("click", recommend);
-  goalInput?.addEventListener("keydown", e => {
-    if (e.key === "Enter") recommend();
+  goalInput?.addEventListener("keydown", event => {
+    if (event.key === "Enter") recommend();
   });
 
   const reviews = [
@@ -254,40 +273,131 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   ];
 
-  const revGrid = document.getElementById("reviews-grid");
-  if (revGrid) {
-    revGrid.innerHTML = reviews.map(r => `
+  const reviewsGrid = document.getElementById("reviews-grid");
+  if (reviewsGrid) {
+    reviewsGrid.innerHTML = reviews.map(review => `
       <article class="review-card">
         <div class="review-header">
-          <div class="review-avatar">${r.name[0]}</div>
+          <div class="review-avatar">${review.name[0]}</div>
           <div class="review-meta">
-            <strong>${r.name}</strong>
-            <span>${r.date}</span>
+            <strong>${review.name}</strong>
+            <span>${review.date}</span>
           </div>
         </div>
-        <div class="review-stars">${"★".repeat(r.rating)}</div>
-        <p class="review-text">"${r.text}"</p>
-        <div class="review-book">Leyó: <strong>${r.book}</strong></div>
+        <div class="review-stars">${"★".repeat(review.rating)}</div>
+        <p class="review-text">"${review.text}"</p>
+        <div class="review-book">Leyó: <strong>${review.book}</strong></div>
       </article>
     `).join("");
   }
 
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      if (!entry.isIntersecting) return;
-      entry.target.classList.add("is-visible");
-      observer.unobserve(entry.target);
+  bindBookRequestForm();
+  bindRevealAnimation();
+
+  function bindBookRequestForm() {
+    const form = document.getElementById("book-request-form");
+    const feedback = document.getElementById("book-request-feedback");
+    if (!form || !feedback) return;
+
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      feedback.textContent = "Enviando sugerencia...";
+      feedback.classList.remove("is-error", "is-success");
+
+      const payload = {
+        name: document.getElementById("request-name")?.value.trim() || "",
+        email: document.getElementById("request-email")?.value.trim() || "",
+        requestedTitle: document.getElementById("request-title")?.value.trim() || "",
+        requestedAuthor: document.getElementById("request-author")?.value.trim() || "",
+        notes: document.getElementById("request-notes")?.value.trim() || ""
+      };
+
+      try {
+        const response = await fetch("/api/book-requests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "No se pudo enviar la sugerencia");
+
+        form.reset();
+        feedback.textContent = "Listo. Tu sugerencia quedó guardada para evaluar nuevos libros digitales.";
+        feedback.classList.add("is-success");
+      } catch (error) {
+        feedback.textContent = error.message;
+        feedback.classList.add("is-error");
+      }
     });
-  }, { threshold: .14 });
+  }
 
-  document.querySelectorAll(".transformation-card, .book-card, .category-card, .review-card, .recommender").forEach(el => {
-    el.style.opacity = "0";
-    el.style.transform = "translateY(22px)";
-    el.style.transition = "opacity .55s ease, transform .55s ease";
-    observer.observe(el);
-  });
+  function bindRevealAnimation() {
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-visible");
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: .14 });
 
-  const style = document.createElement("style");
-  style.textContent = `.is-visible{opacity:1!important;transform:translateY(0)!important}`;
-  document.head.appendChild(style);
+    document.querySelectorAll(".transformation-card, .book-card, .category-card, .review-card, .recommender, .preview-card, .support-card, .request-form").forEach(element => {
+      element.style.opacity = "0";
+      element.style.transform = "translateY(22px)";
+      element.style.transition = "opacity .55s ease, transform .55s ease";
+      observer.observe(element);
+    });
+
+    const style = document.createElement("style");
+    style.textContent = `.is-visible{opacity:1!important;transform:translateY(0)!important}`;
+    document.head.appendChild(style);
+  }
+
+  function createPreviewModal() {
+    const wrapper = document.createElement("div");
+    wrapper.className = "preview-modal";
+    wrapper.innerHTML = `
+      <div class="preview-modal-backdrop" data-close-preview></div>
+      <div class="preview-modal-dialog" role="dialog" aria-modal="true" aria-label="Muestra de lectura">
+        <button class="preview-modal-close" data-close-preview aria-label="Cerrar muestra">×</button>
+        <div class="preview-modal-head">
+          <span class="preview-modal-label">Muestra de lectura</span>
+          <h3 id="preview-modal-title">Vista previa</h3>
+          <p>Primeras 3 páginas del archivo digital cargado.</p>
+        </div>
+        <iframe class="preview-modal-frame" id="preview-modal-frame" title="Vista previa del libro"></iframe>
+      </div>
+    `;
+    document.body.appendChild(wrapper);
+
+    wrapper.addEventListener("click", event => {
+      if (event.target.matches("[data-close-preview]")) api.close();
+    });
+
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") api.close();
+    });
+
+    const title = wrapper.querySelector("#preview-modal-title");
+    const frame = wrapper.querySelector("#preview-modal-frame");
+
+    const api = {
+      open(book) {
+        title.textContent = `${book.title} · muestra`; 
+        frame.src = `${book.previewUrl}#toolbar=0&navpanes=0&scrollbar=1`;
+        wrapper.classList.add("open");
+        document.body.style.overflow = "hidden";
+      },
+      close() {
+        wrapper.classList.remove("open");
+        frame.src = "about:blank";
+        document.body.style.overflow = "";
+      }
+    };
+
+    return api;
+  }
+
+  function escapeHtml(value = "") {
+    return String(value).replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
+  }
 });

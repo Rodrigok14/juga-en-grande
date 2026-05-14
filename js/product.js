@@ -1,19 +1,13 @@
-/* ================================================
-   PRODUCT PAGE — JS Logic
-   ================================================ */
-
-document.addEventListener("DOMContentLoaded", () => {
-
-  /* ---- Navbar scroll ---- */
+﻿document.addEventListener("DOMContentLoaded", () => {
   const navbar = document.getElementById("navbar");
   window.addEventListener("scroll", () => {
     navbar?.classList.toggle("scrolled", window.scrollY > 50);
   }, { passive: true });
 
-  /* ---- Get book ---- */
   const params = new URLSearchParams(window.location.search);
-  const slug   = params.get("slug");
-  const book   = slug ? getBookBySlug(slug) : null;
+  const slug = params.get("slug");
+  const book = slug ? getBookBySlug(slug) : null;
+  const normalizeFormat = value => String(value || "").toLowerCase().includes("digital") ? "digital" : "fisico";
 
   if (!book) {
     document.getElementById("product-loading").innerHTML = `
@@ -26,40 +20,50 @@ document.addEventListener("DOMContentLoaded", () => {
     return;
   }
 
-  /* ---- SEO ---- */
-  document.title = `${book.title} — ${book.author} | Librería Universo`;
+  document.title = `${book.title} — ${book.author} | Jugá en Grande`;
   document.getElementById("page-title").textContent = document.title;
-  document.getElementById("page-desc").content =
-    `${book.synopsis} Cómpralo en Librería Universo por solo ${formatPrice(book.price)}.`;
+  document.getElementById("page-desc").content = `${book.synopsis} Cómpralo en Jugá en Grande por ${formatPrice(book.price)}.`;
 
-  /* ---- Breadcrumb ---- */
-  const catName = CATEGORIES.find(c => c.id === book.category)?.name || book.category;
-  document.getElementById("breadcrumb-cat").innerHTML =
-    `<a href="catalogo.html?cat=${book.category}">${catName}</a>`;
+  const categoryName = CATEGORIES.find(category => category.id === book.category)?.name || book.category;
+  document.getElementById("breadcrumb-cat").innerHTML = `<a href="catalogo.html?cat=${book.category}">${categoryName}</a>`;
   document.getElementById("breadcrumb-title").textContent = book.title;
 
-  /* ---- State ---- */
   let qty = 1;
-  let selectedFormat = book.format;
-
-  /* ---- Discount ---- */
+  let selectedFormat = normalizeFormat(book.format);
   const discount = book.oldPrice ? Math.round((1 - book.price / book.oldPrice) * 100) : null;
+  const isDigital = selectedFormat === "digital";
 
-  /* ---- Stock status ---- */
   let stockHTML = "";
   if (book.stock === 0) {
-    stockHTML = `<span class="product-stock-status out-stock">✗ Sin stock</span>`;
-  } else if (book.stock <= 5) {
+    stockHTML = `<span class="product-stock-status out-stock">✕ Sin stock</span>`;
+  } else if (!isDigital && book.stock <= 5) {
     stockHTML = `<span class="product-stock-status low-stock">⚠️ ¡Solo ${book.stock} disponibles!</span>`;
+  } else if (isDigital) {
+    stockHTML = `<span class="product-stock-status in-stock">✓ Descarga disponible al aprobarse el pago</span>`;
   } else {
     stockHTML = `<span class="product-stock-status in-stock">✓ En stock</span>`;
   }
 
-  /* ---- Render product ---- */
+  const supportHtml = isDigital
+    ? `<div class="trust-point"><span>📩</span> Descarga por web y por email</div>`
+    : `<div class="trust-point"><span>📍</span> Entrega solo en San Miguel de Tucumán</div>`;
+
+  const previewHtml = book.hasPreview
+    ? `
+      <div class="product-preview-card product-details">
+        <div>
+          <span class="product-preview-kicker">Muestra disponible</span>
+          <h3>Leé las primeras 3 páginas antes de comprar</h3>
+          <p>Ideal para subir confianza y ayudar a que el lector decida por contenido, no solo por portada.</p>
+        </div>
+        <button class="btn btn-secondary" id="open-preview-btn">Leer muestra</button>
+      </div>
+    `
+    : "";
+
   const container = document.getElementById("product-container");
   container.innerHTML = `
     <div class="product-layout" id="product-layout">
-      <!-- Gallery -->
       <div class="product-gallery">
         <div class="product-main-img" id="main-img-wrap">
           <img src="${book.cover}" alt="Portada de ${book.title}" id="main-img" />
@@ -72,13 +76,13 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
       </div>
 
-      <!-- Info -->
       <div class="product-info">
-        <a href="catalogo.html?cat=${book.category}" class="product-category-link">${catName}</a>
+        <a href="catalogo.html?cat=${book.category}" class="product-category-link">${categoryName}</a>
 
         <div class="product-badges">
+          ${isDigital ? '<span class="book-badge">Descarga digital</span>' : ''}
           ${book.badge === "bestseller" ? '<span class="book-badge badge-bestseller">🔥 Best Seller</span>' : ""}
-          ${book.badge === "new"        ? '<span class="book-badge badge-new">✨ Nuevo lanzamiento</span>'  : ""}
+          ${book.badge === "new" ? '<span class="book-badge badge-new">✨ Nuevo lanzamiento</span>' : ""}
         </div>
 
         <h1 class="product-title">${book.title}</h1>
@@ -98,21 +102,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
         ${stockHTML}
 
-        ${book.stock <= 5 && book.stock > 0 ? `
+        ${!isDigital && book.stock <= 5 && book.stock > 0 ? `
         <div class="urgency-bar">
-          🔥 <strong>${book.stock} personas</strong> tienen este libro en su carrito ahora mismo.
+          🔥 <strong>${book.stock} personas</strong> tienen este libro en su radar ahora mismo.
         </div>` : ""}
 
-        <!-- Format selector -->
         <div class="format-selector">
           <div class="format-label">Formato:</div>
           <div class="format-options">
-            <button class="format-option ${selectedFormat === "físico" ? "active" : ""}" data-format="físico">📗 Físico</button>
+            <button class="format-option ${selectedFormat === "fisico" ? "active" : ""}" data-format="fisico">📗 Físico</button>
             <button class="format-option ${selectedFormat === "digital" ? "active" : ""}" data-format="digital">📱 Digital</button>
           </div>
         </div>
 
-        <!-- Quantity -->
         <div class="qty-selector">
           <span class="qty-selector-label">Cantidad:</span>
           <div class="qty-control">
@@ -122,50 +124,46 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         </div>
 
-        <!-- CTA -->
         <div class="product-cta">
           <button class="btn-add-cart" id="add-to-cart-btn">🛒 Añadir al carrito</button>
           <button class="btn-buy-now" id="buy-now-btn">⚡ Comprar ahora</button>
         </div>
 
-        <!-- Trust -->
         <div class="product-trust">
-          <div class="trust-point"><span>🚚</span> Envío en 24-48h</div>
+          ${isDigital ? '<div class="trust-point"><span>⚡</span> Acceso apenas se aprueba el pago</div>' : '<div class="trust-point"><span>🚚</span> Entrega coordinada en 24-48h</div>'}
           <div class="trust-point"><span>🔒</span> Pago 100% seguro</div>
-          <div class="trust-point"><span>↩️</span> 30 días devolución</div>
-          <div class="trust-point"><span>✅</span> Libro original</div>
+          ${supportHtml}
+          <div class="trust-point"><span>💬</span> Soporte por WhatsApp 3816590235</div>
         </div>
 
-        <!-- Synopsis -->
+        ${previewHtml}
+
         <div class="product-synopsis product-details">
           <h3 class="details-title">Sinopsis</h3>
           <div class="synopsis-text collapsed" id="synopsis-text">${book.synopsis}</div>
           <button class="read-more-btn" id="read-more-btn">Leer más →</button>
         </div>
 
-        <!-- Benefits -->
         <div class="product-benefits">
           <h4>✨ ¿Por qué este libro?</h4>
           <div class="benefit-item"><span class="benefit-icon">🎯</span><span>Conocimiento práctico y aplicable desde el primer capítulo.</span></div>
           <div class="benefit-item"><span class="benefit-icon">🧠</span><span>Transforma tu forma de pensar con perspectivas comprobadas.</span></div>
           <div class="benefit-item"><span class="benefit-icon">⭐</span><span>Más de ${book.reviews.toLocaleString()} lectores lo recomiendan.</span></div>
-          <div class="benefit-item"><span class="benefit-icon">📖</span><span>Escritura clara y accesible para cualquier lector.</span></div>
+          <div class="benefit-item"><span class="benefit-icon">📖</span><span>${isDigital ? "Se entrega en formato digital con descarga" : "Edición física lista para entrega local"}.</span></div>
         </div>
 
-        <!-- Book details -->
         <div class="product-details">
           <h3 class="details-title">Detalles del libro</h3>
           <div class="details-grid">
             <div class="detail-row"><span class="label">Páginas</span><span class="value">${book.pages}</span></div>
             <div class="detail-row"><span class="label">Idioma</span><span class="value">${book.language}</span></div>
-            <div class="detail-row"><span class="label">Formato</span><span class="value">${book.format}</span></div>
-            <div class="detail-row"><span class="label">Categoría</span><span class="value">${catName}</span></div>
+            <div class="detail-row"><span class="label">Formato</span><span class="value">${isDigital ? "Digital" : "Físico"}</span></div>
+            <div class="detail-row"><span class="label">Categoría</span><span class="value">${categoryName}</span></div>
             <div class="detail-row"><span class="label">Autor</span><span class="value">${book.author}</span></div>
-            <div class="detail-row"><span class="label">Disponibilidad</span><span class="value">${book.stock > 0 ? "En stock" : "Agotado"}</span></div>
+            <div class="detail-row"><span class="label">Disponibilidad</span><span class="value">${isDigital ? "Descarga inmediata" : (book.stock > 0 ? "En stock" : "Agotado")}</span></div>
           </div>
         </div>
 
-        <!-- Reviews preview -->
         <div class="product-reviews product-details">
           <h3 class="details-title">Reseñas de lectores (${book.reviews.toLocaleString()})</h3>
           <div class="reviews-list" id="product-reviews-list"></div>
@@ -174,78 +172,79 @@ document.addEventListener("DOMContentLoaded", () => {
     </div>
   `;
 
-  /* ---- Reviews ---- */
-  const revList = document.getElementById("product-reviews-list");
-  if (revList) {
-    const sampleReviews = REVIEWS.slice(0, 3);
-    revList.innerHTML = sampleReviews.map(r => `
+  const previewModal = createPreviewModal();
+  document.getElementById("open-preview-btn")?.addEventListener("click", () => previewModal.open(book));
+
+  const reviewsList = document.getElementById("product-reviews-list");
+  if (reviewsList) {
+    reviewsList.innerHTML = REVIEWS.slice(0, 3).map(review => `
       <div class="product-review-card">
         <div class="product-review-header">
-          <div class="review-avatar-sm">${r.name[0]}</div>
+          <div class="review-avatar-sm">${review.name[0]}</div>
           <div>
-            <strong style="font-size:.9rem">${r.name}</strong><br>
-            <span style="color:var(--color-accent);font-size:.85rem">${"★".repeat(r.rating)}</span>
-            <span style="color:var(--color-text-3);font-size:.78rem;margin-left:6px">${r.date}</span>
+            <strong style="font-size:.9rem">${review.name}</strong><br>
+            <span style="color:var(--color-accent);font-size:.85rem">${"★".repeat(review.rating)}</span>
+            <span style="color:var(--color-text-3);font-size:.78rem;margin-left:6px">${review.date}</span>
           </div>
         </div>
-        <div class="product-review-text">"${r.text}"</div>
+        <div class="product-review-text">"${review.text}"</div>
       </div>
     `).join("");
   }
 
-  /* ---- Gallery thumbs ---- */
-  document.querySelectorAll(".gallery-thumb").forEach((thumb, i) => {
+  document.querySelectorAll(".gallery-thumb").forEach(thumb => {
     thumb.addEventListener("click", () => {
-      document.querySelectorAll(".gallery-thumb").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".gallery-thumb").forEach(item => item.classList.remove("active"));
       thumb.classList.add("active");
       const mainImg = document.getElementById("main-img");
       if (mainImg) mainImg.src = thumb.querySelector("img").src;
     });
   });
 
-  /* ---- Read more ---- */
   document.getElementById("read-more-btn")?.addEventListener("click", () => {
     const text = document.getElementById("synopsis-text");
-    const btn  = document.getElementById("read-more-btn");
+    const button = document.getElementById("read-more-btn");
     if (text?.classList.contains("collapsed")) {
       text.classList.remove("collapsed");
-      btn.textContent = "Leer menos ↑";
+      button.textContent = "Leer menos ↑";
     } else {
       text?.classList.add("collapsed");
-      btn.textContent = "Leer más →";
+      button.textContent = "Leer más →";
     }
   });
 
-  /* ---- Format selector ---- */
-  document.querySelectorAll(".format-option").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".format-option").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      selectedFormat = btn.dataset.format;
+  document.querySelectorAll(".format-option").forEach(button => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".format-option").forEach(item => item.classList.remove("active"));
+      button.classList.add("active");
     });
   });
 
-  /* ---- Qty ---- */
   document.getElementById("qty-minus")?.addEventListener("click", () => {
-    if (qty > 1) { qty--; document.getElementById("qty-input").value = qty; }
+    if (qty > 1) {
+      qty -= 1;
+      document.getElementById("qty-input").value = qty;
+    }
   });
   document.getElementById("qty-plus")?.addEventListener("click", () => {
-    if (qty < (book.stock || 99)) { qty++; document.getElementById("qty-input").value = qty; }
+    if (qty < (book.stock || 99)) {
+      qty += 1;
+      document.getElementById("qty-input").value = qty;
+    }
   });
 
-  /* ---- Add to cart ---- */
   document.getElementById("add-to-cart-btn")?.addEventListener("click", () => {
     Cart.add(book, qty);
     Cart.openDrawer();
     if (typeof Analytics !== "undefined") Analytics.addToCart(book, qty);
   });
+
   document.getElementById("buy-now-btn")?.addEventListener("click", () => {
     Cart.clear();
     Cart.add(book, qty);
     window.location.href = "carrito.html";
   });
 
-  /* ---- Sticky CTA ---- */
   const stickyCta = document.getElementById("sticky-cta");
   const stickyTitle = document.getElementById("sticky-title");
   const stickyPrice = document.getElementById("sticky-price");
@@ -257,38 +256,80 @@ document.addEventListener("DOMContentLoaded", () => {
       Cart.add(book, 1);
       Cart.openDrawer();
     });
-    // Show sticky after scrolling past CTA
     const observer = new IntersectionObserver(entries => {
       stickyCta.style.display = entries[0].isIntersecting ? "none" : "flex";
     }, { threshold: 0 });
-    const ctaEl = document.querySelector(".product-cta");
-    if (ctaEl) observer.observe(ctaEl);
+    const ctaElement = document.querySelector(".product-cta");
+    if (ctaElement) observer.observe(ctaElement);
   }
 
-  /* ---- Related books ---- */
   const related = getRelated(book, 5);
   if (related.length > 0) {
-    const relSection = document.getElementById("related-section");
-    const relCarousel = document.getElementById("related-carousel");
-    if (relSection) relSection.style.display = "block";
-    if (relCarousel) {
-      relCarousel.innerHTML = related.map(b => `
-        <div class="book-card" onclick="window.location.href='producto.html?slug=${b.slug}'" style="cursor:pointer;min-width:200px">
+    const relatedSection = document.getElementById("related-section");
+    const relatedCarousel = document.getElementById("related-carousel");
+    if (relatedSection) relatedSection.style.display = "block";
+    if (relatedCarousel) {
+      relatedCarousel.innerHTML = related.map(item => `
+        <div class="book-card" onclick="window.location.href='producto.html?slug=${item.slug}'" style="cursor:pointer;min-width:200px">
           <div class="book-card-cover">
-            ${b.badge ? `<span class="book-badge badge-${b.badge}">${b.badge === "bestseller" ? "🔥" : b.badge === "new" ? "✨" : "🏷️"}</span>` : ""}
-            <img src="${b.cover}" alt="${b.title}" loading="lazy" />
-            <div class="book-card-quick-add"><button data-add-to-cart="${b.id}" onclick="event.stopPropagation()">🛒 Añadir</button></div>
+            ${item.badge ? `<span class="book-badge badge-${item.badge}">${item.badge === "bestseller" ? "🔥" : item.badge === "new" ? "✨" : "🏷️"}</span>` : ""}
+            <img src="${item.cover}" alt="${item.title}" loading="lazy" />
+            <div class="book-card-quick-add"><button data-add-to-cart="${item.id}" onclick="event.stopPropagation()">🛒 Añadir</button></div>
           </div>
           <div class="book-card-body">
-            <div class="book-title">${b.title}</div>
-            <div class="book-author">${b.author}</div>
-            <div class="book-price-row"><span class="book-price">${formatPrice(b.price)}</span></div>
+            <div class="book-title">${item.title}</div>
+            <div class="book-author">${item.author}</div>
+            <div class="book-price-row"><span class="book-price">${formatPrice(item.price)}</span></div>
           </div>
         </div>
       `).join("");
     }
   }
 
-  /* ---- Analytics ---- */
   if (typeof Analytics !== "undefined") Analytics.viewProduct(book);
+
+  function createPreviewModal() {
+    const wrapper = document.createElement("div");
+    wrapper.className = "product-preview-modal";
+    wrapper.innerHTML = `
+      <div class="product-preview-backdrop" data-close-preview></div>
+      <div class="product-preview-dialog" role="dialog" aria-modal="true" aria-label="Muestra de lectura">
+        <button class="product-preview-close" data-close-preview aria-label="Cerrar">×</button>
+        <div class="product-preview-head">
+          <span>Muestra de lectura</span>
+          <h3 id="product-preview-title">Vista previa</h3>
+          <p>Primeras 3 páginas del archivo digital.</p>
+        </div>
+        <iframe id="product-preview-frame" class="product-preview-frame" title="Muestra del libro"></iframe>
+      </div>
+    `;
+    document.body.appendChild(wrapper);
+
+    const frame = wrapper.querySelector("#product-preview-frame");
+    const title = wrapper.querySelector("#product-preview-title");
+
+    wrapper.addEventListener("click", event => {
+      if (event.target.matches("[data-close-preview]")) api.close();
+    });
+
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") api.close();
+    });
+
+    const api = {
+      open(currentBook) {
+        title.textContent = `${currentBook.title} · muestra`;
+        frame.src = `${currentBook.previewUrl}#toolbar=0&navpanes=0&scrollbar=1`;
+        wrapper.classList.add("open");
+        document.body.style.overflow = "hidden";
+      },
+      close() {
+        wrapper.classList.remove("open");
+        frame.src = "about:blank";
+        document.body.style.overflow = "";
+      }
+    };
+
+    return api;
+  }
 });

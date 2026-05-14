@@ -451,3 +451,95 @@
   .product-trust { grid-template-columns: 1fr; }
   .details-grid { grid-template-columns: 1fr; }
 }
+.product-preview-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid rgba(0,255,136,.2);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(0,255,136,.08), rgba(255,255,255,.02));
+}
+.product-preview-card h3 {
+  margin: 6px 0 8px;
+  font-size: 1.15rem;
+}
+.product-preview-card p {
+  color: var(--color-text-2);
+}
+.product-preview-kicker {
+  color: var(--color-accent);
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.product-preview-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: none;
+}
+.product-preview-modal.open { display: block; }
+.product-preview-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.72);
+}
+.product-preview-dialog {
+  position: relative;
+  width: min(1100px, calc(100vw - 32px));
+  height: min(86vh, 860px);
+  margin: 7vh auto 0;
+  padding: 20px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 22px;
+  background: #0d1210;
+  box-shadow: 0 30px 90px rgba(0,0,0,.5);
+}
+.product-preview-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.08);
+  color: #fff;
+  font-size: 1.6rem;
+}
+.product-preview-head {
+  margin-bottom: 14px;
+  padding-right: 54px;
+}
+.product-preview-head span {
+  display: inline-flex;
+  margin-bottom: 10px;
+  color: var(--color-accent);
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.product-preview-head p { color: var(--color-text-2); }
+.product-preview-frame {
+  width: 100%;
+  height: calc(100% - 94px);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  background: #fff;
+}
+@media (max-width: 768px) {
+  .product-preview-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .product-preview-dialog {
+    width: calc(100vw - 16px);
+    height: 88vh;
+    margin-top: 4vh;
+    padding: 14px;
+  }
+  .product-preview-frame { height: calc(100% - 104px); }
+}

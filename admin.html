@@ -45,6 +45,7 @@
           <button class="admin-tab" data-tab="combos">Combos</button>
           <button class="admin-tab" data-tab="orders">Pedidos</button>
           <button class="admin-tab" data-tab="customers">Clientes</button>
+          <button class="admin-tab" data-tab="requests">Sugerencias</button>
         </nav>
         <button class="btn btn-secondary" id="logout-btn">Salir</button>
       </header>
@@ -148,6 +149,29 @@
             </table>
           </div>
         </section>
+
+        <section class="admin-panel tab-panel" id="tab-requests">
+          <div class="admin-panel-head">
+            <div>
+              <h2>Sugerencias de libros</h2>
+              <p>Pedidos de lectores sobre libros digitales, autores o temas para sumar a la tienda.</p>
+            </div>
+            <button class="btn btn-secondary" id="refresh-requests-btn">Actualizar</button>
+          </div>
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Pedido</th>
+                  <th>Cliente</th>
+                  <th>Detalle</th>
+                  <th>Fecha</th>
+                </tr>
+              </thead>
+              <tbody id="requests-table"></tbody>
+            </table>
+          </div>
+        </section>
       </div>
     </section>
   </main>
@@ -191,7 +215,7 @@
         <label>Portada<input id="product-image" name="image" type="file" accept="image/*" /></label>
         <label>Archivo digital<input id="product-digital-file" name="digitalFile" type="file" accept=".pdf,.zip,application/pdf,application/zip" /></label>
       </div>
-      <p class="admin-muted" id="product-digital-file-status">Sin archivo digital cargado.</p>
+      <p class="admin-muted" id="product-digital-file-status">Sin archivo digital cargado. Si subes un PDF, la muestra de 3 páginas se genera automáticamente.</p>
       <label>Descripcion<textarea id="product-description" name="description" rows="4"></textarea></label>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary" data-close-modal>Cancelar</button>

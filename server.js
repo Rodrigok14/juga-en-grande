@@ -6,6 +6,7 @@ const crypto = require("crypto");
 const express = require("express");
 const multer = require("multer");
 const nodemailer = require("nodemailer");
+const { PDFDocument } = require("pdf-lib");
 const { put } = require("@vercel/blob");
 const { MercadoPagoConfig, Preference, Payment } = require("mercadopago");
 const { pool, moneyToCents, centsToAmount } = require("./lib/db");
@@ -350,6 +351,31 @@ async function fulfillApprovedOrder(orderId, baseUrl) {
   }
 }
 
+async function backfillMissingPreviews() {
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, digital_file_url, digital_file_name, preview_file_url
+      FROM products
+      WHERE format = 'digital'
+        AND digital_file_url IS NOT NULL
+    `);
+
+    for (const row of rows) {
+      if (!previewNeedsRegeneration(row.preview_file_url)) continue;
+      const preview = await buildPdfPreviewFromStoredFile(row.digital_file_url, row.digital_file_name);
+      if (!preview) continue;
+      await pool.query(
+        `UPDATE products
+         SET preview_file_url = $1, preview_file_name = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $3`,
+        [preview.url, preview.name, row.id]
+      );
+    }
+  } catch (error) {
+    console.error("Preview backfill error", error);
+  }
+}
+
 async function persistUploadedImage(file) {
   if (!file) return null;
   const contentType = file.mimetype || "application/octet-stream";
@@ -397,13 +423,119 @@ async function persistUploadedDigitalFile(file) {
       contentType,
       token: process.env.BLOB_READ_WRITE_TOKEN
     });
-    return { url: blob.url, name: file.originalname || filename };
+    const preview = await persistDigitalPreview(file, filename);
+    return {
+      url: blob.url,
+      name: file.originalname || filename,
+      previewUrl: preview?.url || null,
+      previewName: preview?.name || null
+    };
   }
 
+  const preview = await persistDigitalPreview(file, file.filename);
   return {
     url: path.join(privateDigitalDir, file.filename),
-    name: file.originalname || file.filename
+    name: file.originalname || file.filename,
+    previewUrl: preview?.url || null,
+    previewName: preview?.name || null
   };
+}
+
+async function digitalFileBuffer(file) {
+  if (Buffer.isBuffer(file?.buffer)) return file.buffer;
+  if (file?.path) return fs.promises.readFile(file.path);
+  if (file?.filename) {
+    const absolutePath = path.join(privateDigitalDir, file.filename);
+    return fs.promises.readFile(absolutePath);
+  }
+  throw new Error("No se pudo leer el archivo digital");
+}
+
+async function buildPdfPreviewBuffer(file) {
+  const extension = path.extname(file?.originalname || file?.filename || "").toLowerCase();
+  const looksLikePdf = file?.mimetype === "application/pdf" || extension === ".pdf";
+  if (!looksLikePdf) return null;
+
+  const sourceBytes = await digitalFileBuffer(file);
+  const source = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
+  const pageCount = Math.min(3, source.getPageCount());
+  if (pageCount <= 0) return null;
+
+  const previewDoc = await PDFDocument.create();
+  const pages = await previewDoc.copyPages(source, Array.from({ length: pageCount }, (_item, index) => index));
+  pages.forEach(page => previewDoc.addPage(page));
+  const previewBytes = await previewDoc.save();
+  return Buffer.from(previewBytes);
+}
+
+async function persistPreviewBytes(previewBuffer, previewName) {
+  if (isVercel) {
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      throw new Error("Falta configurar BLOB_READ_WRITE_TOKEN para guardar vistas previas");
+    }
+    const blob = await put(`digital-previews/${safeUploadFilename(previewName)}`, previewBuffer, {
+      access: "public",
+      contentType: "application/pdf",
+      token: process.env.BLOB_READ_WRITE_TOKEN
+    });
+    return { url: blob.url, name: previewName };
+  }
+
+  const previewFilename = `preview-${safeUploadFilename(previewName)}`;
+  const previewPath = path.join(privateDigitalDir, previewFilename);
+  await fs.promises.writeFile(previewPath, previewBuffer);
+  return { url: previewPath, name: previewName };
+}
+
+async function persistDigitalPreview(file, persistedFilename) {
+  try {
+    const previewBuffer = await buildPdfPreviewBuffer(file);
+    if (!previewBuffer) return null;
+
+    const previewName = `muestra-${path.basename(file.originalname || persistedFilename || "preview.pdf", path.extname(file.originalname || persistedFilename || ".pdf"))}.pdf`;
+    return persistPreviewBytes(previewBuffer, previewName);
+  } catch (error) {
+    console.error("Preview generation error", error);
+    return null;
+  }
+}
+
+async function digitalBufferFromStoredUrl(fileUrl) {
+  if (/^https?:\/\//i.test(fileUrl)) {
+    const remote = await fetch(fileUrl);
+    if (!remote.ok) throw new Error("No se pudo leer el PDF original");
+    return Buffer.from(await remote.arrayBuffer());
+  }
+
+  const absolutePath = path.resolve(fileUrl);
+  if (!absolutePath.startsWith(path.resolve(privateDigitalDir))) {
+    throw new Error("Ruta de archivo invalida");
+  }
+  return fs.promises.readFile(absolutePath);
+}
+
+async function buildPdfPreviewFromStoredFile(fileUrl, fileName) {
+  const extension = path.extname(fileName || fileUrl || "").toLowerCase();
+  if (extension !== ".pdf") return null;
+
+  const sourceBytes = await digitalBufferFromStoredUrl(fileUrl);
+  const source = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
+  const pageCount = Math.min(3, source.getPageCount());
+  if (pageCount <= 0) return null;
+
+  const previewDoc = await PDFDocument.create();
+  const pages = await previewDoc.copyPages(source, Array.from({ length: pageCount }, (_item, index) => index));
+  pages.forEach(page => previewDoc.addPage(page));
+  const previewBytes = Buffer.from(await previewDoc.save());
+  const previewName = `muestra-${path.basename(fileName || "preview.pdf", path.extname(fileName || ".pdf"))}.pdf`;
+  return persistPreviewBytes(previewBytes, previewName);
+}
+
+function previewNeedsRegeneration(previewUrl) {
+  const current = String(previewUrl || "").trim();
+  if (!current) return true;
+  if (isVercel && !/^https?:\/\//i.test(current)) return true;
+  return false;
 }
 
 function productRow(row, options = {}) {
@@ -423,12 +555,16 @@ function productRow(row, options = {}) {
     synopsis: row.description,
     description: row.description,
     hasDigitalFile: Boolean(row.digital_file_url),
+    hasPreview: Boolean(row.preview_file_url),
+    previewUrl: row.preview_file_url ? `/api/products/${row.id}/preview` : "",
     active: Boolean(row.active)
   };
 
   if (options.includePrivate) {
     item.digitalFileName = row.digital_file_name || "";
     item.digitalFileUrl = row.digital_file_url || "";
+    item.previewFileName = row.preview_file_name || "";
+    item.previewFileUrl = row.preview_file_url || "";
   }
 
   return item;
@@ -544,6 +680,31 @@ async function loadDigitalEmailAttachments(order) {
   return attachments;
 }
 
+async function streamStoredFile(res, fileUrl, downloadName, disposition = "attachment") {
+  if (/^https?:\/\//i.test(fileUrl)) {
+    const remote = await fetch(fileUrl);
+    if (!remote.ok) throw new Error("No se pudo obtener el archivo");
+    const bytes = Buffer.from(await remote.arrayBuffer());
+    res.setHeader("Content-Type", remote.headers.get("content-type") || "application/octet-stream");
+    res.setHeader("Content-Disposition", `${disposition}; filename="${encodeURIComponent(downloadName)}"`);
+    return res.end(bytes);
+  }
+
+  const absolutePath = path.resolve(fileUrl);
+  if (!absolutePath.startsWith(path.resolve(privateDigitalDir))) {
+    throw new Error("Ruta de archivo invalida");
+  }
+
+  return disposition === "inline"
+    ? res.sendFile(absolutePath, {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `inline; filename="${encodeURIComponent(downloadName)}"`
+        }
+      })
+    : res.download(absolutePath, downloadName);
+}
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, app: "juga-en-grande" });
 });
@@ -599,6 +760,38 @@ app.get("/api/products/:id", async (req, res) => {
   }
 });
 
+app.get("/api/products/:id/preview", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT id, title, digital_file_url, digital_file_name, preview_file_url, preview_file_name, active FROM products WHERE id = $1",
+      [req.params.id]
+    );
+    const product = rows[0];
+    if (!product || !product.active) return res.status(404).json({ error: "Producto no encontrado" });
+    let previewUrl = product.preview_file_url;
+    let previewName = product.preview_file_name || `${product.title}-muestra.pdf`;
+
+    if (previewNeedsRegeneration(previewUrl)) {
+      const regenerated = await buildPdfPreviewFromStoredFile(product.digital_file_url, product.digital_file_name);
+      if (regenerated) {
+        previewUrl = regenerated.url;
+        previewName = regenerated.name || previewName;
+        await pool.query(
+          `UPDATE products
+           SET preview_file_url = $1, preview_file_name = $2, updated_at = CURRENT_TIMESTAMP
+           WHERE id = $3`,
+          [previewUrl, previewName, product.id]
+        );
+      }
+    }
+
+    if (!previewUrl) return res.status(404).json({ error: "Este producto no tiene muestra disponible" });
+    await streamStoredFile(res, previewUrl, previewName, "inline");
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const productUpload = upload.fields([
   { name: "image", maxCount: 1 },
   { name: "digitalFile", maxCount: 1 }
@@ -618,12 +811,14 @@ app.post("/api/products", requireAdmin, productUpload, async (req, res) => {
     }
     const digitalFileUrl = format === "digital" ? uploadedDigital?.url || null : null;
     const digitalFileName = format === "digital" ? uploadedDigital?.name || null : null;
+    const previewFileUrl = format === "digital" ? uploadedDigital?.previewUrl || null : null;
+    const previewFileName = format === "digital" ? uploadedDigital?.previewName || null : null;
     const { rows } = await pool.query(`
       INSERT INTO products (
         slug, title, author, category, price, old_price, format, stock, image, description,
-        active, display_order, digital_file_url, digital_file_name
+        active, display_order, digital_file_url, digital_file_name, preview_file_url, preview_file_name
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id
     `, [
       body.slug,
       body.title,
@@ -638,7 +833,9 @@ app.post("/api/products", requireAdmin, productUpload, async (req, res) => {
       body.active === "0" ? 0 : 1,
       Number(body.displayOrder || 0),
       digitalFileUrl,
-      digitalFileName
+      digitalFileName,
+      previewFileUrl,
+      previewFileName
     ]);
     res.status(201).json({ ok: true, id: rows[0].id });
   } catch (err) {
@@ -664,6 +861,12 @@ app.put("/api/products/:id", requireAdmin, productUpload, async (req, res) => {
     const digitalFileName = format === "digital"
       ? (uploadedDigital?.name || existingRows[0].digital_file_name || null)
       : null;
+    const previewFileUrl = format === "digital"
+      ? (uploadedDigital?.previewUrl || existingRows[0].preview_file_url || null)
+      : null;
+    const previewFileName = format === "digital"
+      ? (uploadedDigital?.previewName || existingRows[0].preview_file_name || null)
+      : null;
 
     if (format === "digital" && !digitalFileUrl) {
       return res.status(400).json({ error: "Los productos digitales deben incluir un PDF o ZIP" });
@@ -674,8 +877,8 @@ app.put("/api/products/:id", requireAdmin, productUpload, async (req, res) => {
       SET slug=$1, title=$2, author=$3, category=$4, price=$5, old_price=$6,
           format=$7, stock=$8, image=$9, description=$10, active=$11,
           display_order=$12, digital_file_url=$13, digital_file_name=$14,
-          updated_at=CURRENT_TIMESTAMP
-      WHERE id=$15
+          preview_file_url=$15, preview_file_name=$16, updated_at=CURRENT_TIMESTAMP
+      WHERE id=$17
     `, [
       body.slug,
       body.title,
@@ -691,6 +894,8 @@ app.put("/api/products/:id", requireAdmin, productUpload, async (req, res) => {
       Number(body.displayOrder || 0),
       digitalFileUrl,
       digitalFileName,
+      previewFileUrl,
+      previewFileName,
       req.params.id
     ]);
     res.json({ ok: true });
@@ -837,21 +1042,7 @@ app.get("/api/orders/access/:id/download/:productId", async (req, res) => {
     if (!product?.digital_file_url) return res.status(404).json({ error: "El archivo digital no esta disponible" });
 
     const downloadName = product.digital_file_name || `${product.title}.pdf`;
-    if (/^https?:\/\//i.test(product.digital_file_url)) {
-      const remote = await fetch(product.digital_file_url);
-      if (!remote.ok) throw new Error("No se pudo obtener el archivo digital");
-      const contentType = remote.headers.get("content-type") || "application/octet-stream";
-      const buffer = Buffer.from(await remote.arrayBuffer());
-      res.setHeader("Content-Type", contentType);
-      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(downloadName)}"`);
-      return res.send(buffer);
-    }
-
-    const absolutePath = path.resolve(product.digital_file_url);
-    if (!absolutePath.startsWith(path.resolve(privateDigitalDir))) {
-      return res.status(403).json({ error: "Ruta de descarga invalida" });
-    }
-    return res.download(absolutePath, downloadName);
+    await streamStoredFile(res, product.digital_file_url, downloadName, "attachment");
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -907,6 +1098,58 @@ app.get("/api/customers", requireAdmin, async (_req, res) => {
   }
 });
 
+app.post("/api/book-requests", async (req, res) => {
+  try {
+    const name = normalizeText(req.body.name);
+    const email = normalizeEmail(req.body.email);
+    const requestedTitle = normalizeText(req.body.requestedTitle || req.body.title);
+    const requestedAuthor = normalizeText(req.body.requestedAuthor || req.body.author);
+    const notes = normalizeText(req.body.notes);
+
+    if (!requestedTitle) {
+      return res.status(400).json({ error: "Indica al menos un libro, autor o tema que quieras ver en la tienda" });
+    }
+    if (email && !isValidEmail(email)) {
+      return res.status(400).json({ error: "El email no es valido" });
+    }
+
+    await pool.query(`
+      INSERT INTO book_requests (name, email, requested_title, requested_author, notes)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [name, email || null, requestedTitle, requestedAuthor || null, notes || null]);
+
+    res.status(201).json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/book-requests", requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, name, email, requested_title, requested_author, notes, status, created_at
+      FROM book_requests
+      ORDER BY created_at DESC
+      LIMIT 200
+    `);
+
+    res.json({
+      requests: rows.map(row => ({
+        id: row.id,
+        name: row.name || "",
+        email: row.email || "",
+        requestedTitle: row.requested_title,
+        requestedAuthor: row.requested_author || "",
+        notes: row.notes || "",
+        status: row.status || "new",
+        createdAt: row.created_at
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/exchange-rate", async (_req, res) => {
   try {
     const usdArsRate = await getUsdArsRate();
@@ -940,6 +1183,8 @@ app.get("/js/data.js", async (_req, res) => {
       stock: row.stock,
       displayOrder: Number(row.display_order || 0),
       hasDigitalFile: Boolean(row.digital_file_url),
+      hasPreview: Boolean(row.preview_file_url),
+      previewUrl: row.preview_file_url ? `/api/products/${row.id}/preview` : "",
       pages: 240,
       language: "Español",
       featured: true,
@@ -1328,6 +1573,7 @@ if (!isVercel) {
   app.use("/assets/uploads", express.static(publicUploadsDir));
 }
 app.use(express.static(root));
+backfillMissingPreviews();
 
 if (require.main === module) {
   const port = Number(process.env.PORT || 3000);
@@ -1339,7 +1585,8 @@ if (require.main === module) {
 app.locals.privateHelpers = {
   fulfillApprovedOrder,
   sendOrderEmail,
-  loadDigitalEmailAttachments
+  loadDigitalEmailAttachments,
+  backfillMissingPreviews
 };
 
 module.exports = app;
