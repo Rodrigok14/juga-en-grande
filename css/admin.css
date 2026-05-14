@@ -172,6 +172,12 @@
 }
 .admin-action:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .admin-action.is-danger:hover { border-color: var(--color-danger); color: var(--color-danger); }
+.btn.is-loading,
+.btn:disabled {
+  opacity: .72;
+  cursor: wait;
+  filter: grayscale(.15);
+}
 .admin-modal {
   width: min(760px, calc(100vw - 24px));
   border: 1px solid rgba(0,255,136,.24);

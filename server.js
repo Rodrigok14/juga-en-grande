@@ -1022,7 +1022,8 @@ app.get("/api/products", async (req, res) => {
     `);
     res.json({ products: rows.map(row => productRow(row, { includePrivate: Boolean(adminSession) })) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Product create error", err);
+    res.status(500).json({ error: err.message || "No se pudo guardar el producto" });
   }
 });
 
@@ -1032,7 +1033,8 @@ app.get("/api/products/:id", async (req, res) => {
     if (rows.length === 0) return res.status(404).json({ error: "Producto no encontrado" });
     res.json({ product: productRow(rows[0]) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Product update error", err);
+    res.status(500).json({ error: err.message || "No se pudo actualizar el producto" });
   }
 });
 

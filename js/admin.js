@@ -335,26 +335,46 @@ function renderComboProductOptions(selected = []) {
 
 async function saveProduct(event) {
   event.preventDefault();
+  const submitButton = event.submitter || $("#product-form button[type='submit']");
+  setFormState(submitButton, true, "Guardando producto...");
   const id = $("#product-id").value;
   const form = new FormData();
-  form.set("title", $("#product-title").value.trim());
-  form.set("slug", $("#product-slug").value.trim());
-  form.set("author", $("#product-author").value.trim());
-  form.set("category", $("#product-category").value);
-  form.set("price", $("#product-price").value);
-  form.set("oldPrice", $("#product-old-price").value);
-  form.set("displayOrder", $("#product-display-order").value);
-  form.set("format", $("#product-format").value);
-  form.set("stock", $("#product-stock").value);
-  form.set("active", $("#product-active").value);
-  form.set("description", $("#product-description").value.trim());
-  if ($("#product-image").files[0]) form.set("image", $("#product-image").files[0]);
-  [...$("#product-gallery-images").files].slice(0, 3).forEach(file => form.append("galleryImages", file));
-  [...$("#product-digital-files").files].forEach(file => form.append("digitalFiles", file));
-  await api(id ? `/api/products/${id}` : "/api/products", { method: id ? "PUT" : "POST", body: form });
-  closeModals();
-  await loadProducts();
-  showToast("Producto guardado");
+  try {
+    const title = $("#product-title").value.trim();
+    const slug = $("#product-slug").value.trim();
+    const format = $("#product-format").value;
+    const digitalFiles = [...$("#product-digital-files").files];
+    if (!title || !slug) throw new Error("Completa titulo y slug antes de guardar");
+    if (!id && format === "digital" && digitalFiles.length === 0) {
+      throw new Error("Para un producto digital nuevo debes subir al menos un PDF o ZIP");
+    }
+    if (digitalFiles.some(file => file.size > 25 * 1024 * 1024)) {
+      throw new Error("Cada archivo debe pesar menos de 25 MB. Si tienes muchos PDFs, subelos de a poco o comprimilos.");
+    }
+
+    form.set("title", title);
+    form.set("slug", slug);
+    form.set("author", $("#product-author").value.trim());
+    form.set("category", $("#product-category").value);
+    form.set("price", $("#product-price").value);
+    form.set("oldPrice", $("#product-old-price").value);
+    form.set("displayOrder", $("#product-display-order").value);
+    form.set("format", format);
+    form.set("stock", $("#product-stock").value);
+    form.set("active", $("#product-active").value);
+    form.set("description", $("#product-description").value.trim());
+    if ($("#product-image").files[0]) form.set("image", $("#product-image").files[0]);
+    [...$("#product-gallery-images").files].slice(0, 3).forEach(file => form.append("galleryImages", file));
+    digitalFiles.forEach(file => form.append("digitalFiles", file));
+    await api(id ? `/api/products/${id}` : "/api/products", { method: id ? "PUT" : "POST", body: form });
+    closeModals();
+    await loadProducts();
+    showToast("Producto guardado");
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    setFormState(submitButton, false);
+  }
 }
 
 async function saveCombo(event) {
@@ -390,6 +410,20 @@ async function api(url, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "Error de servidor");
   return data;
+}
+
+function setFormState(button, isLoading, label = "Guardando...") {
+  if (!button) return;
+  if (isLoading) {
+    button.dataset.originalText = button.textContent;
+    button.textContent = label;
+    button.disabled = true;
+    button.classList.add("is-loading");
+    return;
+  }
+  button.textContent = button.dataset.originalText || button.textContent;
+  button.disabled = false;
+  button.classList.remove("is-loading");
 }
 
 function money(value) {
