@@ -4,6 +4,20 @@
     { "src": "api/index.js", "use": "@vercel/node" },
     { "src": "**/*", "use": "@vercel/static" }
   ],
+  "headers": [
+    {
+      "source": "/admin.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    },
+    {
+      "source": "/js/admin.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    }
+  ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/index.js" },
     { "src": "/js/data\\.js", "dest": "/api/index.js" },
