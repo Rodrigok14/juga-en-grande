@@ -123,6 +123,29 @@ function normalizeSearchText(value) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+function slugify(value, fallback = "producto") {
+  const slug = normalizeSearchText(value)
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || fallback;
+}
+
+async function uniqueProductSlug(rawSlug, fallbackTitle, excludeId = null) {
+  const base = slugify(rawSlug || fallbackTitle || "producto");
+  let candidate = base;
+  let suffix = 2;
+
+  while (true) {
+    const { rows } = await pool.query(
+      "SELECT id FROM products WHERE slug = $1 AND ($2::int IS NULL OR id <> $2) LIMIT 1",
+      [candidate, excludeId]
+    );
+    if (rows.length === 0) return candidate;
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+}
+
 function isTucumanShipping(city, country) {
   const normalizedCity = normalizeSearchText(city);
   const normalizedCountry = normalizeSearchText(country);
@@ -1290,6 +1313,7 @@ app.post("/api/products", requireAdmin, handleProductUpload, async (req, res) =>
   try {
     const body = req.body;
     const format = body.format || "fisico";
+    const slug = await uniqueProductSlug(body.slug, body.title);
     const imageFile = uploadedFile(req, "image");
     const galleryImageFiles = uploadedFiles(req, "galleryImages");
     const digitalFile = uploadedFile(req, "digitalFile");
@@ -1320,7 +1344,7 @@ app.post("/api/products", requireAdmin, handleProductUpload, async (req, res) =>
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id
     `, [
-      body.slug,
+      slug,
       body.title,
       body.author || "",
       body.category || "negocios",
@@ -1360,6 +1384,7 @@ app.put("/api/products/:id", requireAdmin, handleProductUpload, async (req, res)
     
     const body = req.body;
     const format = body.format || "fisico";
+    const slug = await uniqueProductSlug(body.slug, body.title, Number(req.params.id));
     const imageFile = uploadedFile(req, "image");
     const galleryImageFiles = uploadedFiles(req, "galleryImages");
     const digitalFile = uploadedFile(req, "digitalFile");
@@ -1413,7 +1438,7 @@ app.put("/api/products/:id", requireAdmin, handleProductUpload, async (req, res)
           gallery_images=$18, updated_at=CURRENT_TIMESTAMP
       WHERE id=$19
     `, [
-      body.slug,
+      slug,
       body.title,
       body.author || "",
       body.category || "negocios",

@@ -297,7 +297,7 @@ function openProductModal(product = null) {
   $("#product-description").value = product?.description || product?.synopsis || "";
   $("#product-digital-file-status").textContent = product?.digitalFileName
     ? `Archivo actual: ${product.digitalFileName}${product?.hasPreview ? " • muestra de lectura lista" : " • sin muestra automática"}${product?.digitalFilesManifest?.length ? ` • contiene: ${product.digitalFilesManifest.join(", ")}` : ""}`
-    : "Sin archivo digital cargado. Si subes varios PDF, el sistema los comprime automaticamente en un ZIP y genera la muestra desde el primer PDF.";
+    : "Sin archivo digital cargado. Puedes subir uno o varios PDF; el cliente los recibe como descargas digitales.";
   $("#product-gallery-status").textContent = product?.galleryImages?.length > 1
     ? `Fotos actuales: ${product.galleryImages.length - 1} extra ademas de la portada.`
     : "Sin fotos extra cargadas.";
@@ -318,7 +318,7 @@ function openComboModal(combo = null) {
   renderComboProductOptions(combo?.items?.map(item => item.id) || []);
   $("#combo-digital-status").textContent = combo?.hasDigitalPack
     ? `Pack generado: ${combo.digitalFileName}${combo.digitalFilesManifest?.length ? ` • contiene ${combo.digitalFilesManifest.length} archivo(s)` : ""}`
-    : "Al guardar, el sistema arma un ZIP con los PDFs de los libros digitales seleccionados.";
+    : "Al guardar, el sistema arma un pack digital con los PDFs de los libros seleccionados.";
   $("#combo-modal").showModal();
 }
 
@@ -341,10 +341,10 @@ async function saveProduct(event) {
   const form = new FormData();
   try {
     const title = $("#product-title").value.trim();
-    const slug = $("#product-slug").value.trim();
+    const slug = slugify($("#product-slug").value.trim() || title);
     const format = $("#product-format").value;
     const digitalFiles = [...$("#product-digital-files").files];
-    if (!title || !slug) throw new Error("Completa titulo y slug antes de guardar");
+    if (!title || !slug) throw new Error("Completa titulo antes de guardar");
     if (!id && format === "digital" && digitalFiles.length === 0) {
       throw new Error("Para un producto digital nuevo debes subir al menos un PDF o ZIP");
     }
@@ -419,6 +419,16 @@ async function saveCombo(event) {
   closeModals();
   await loadCombos();
   showToast("Combo guardado");
+}
+
+function slugify(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function closeModals() {
