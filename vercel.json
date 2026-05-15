@@ -20,6 +20,8 @@
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/index.js" },
+    { "src": "/admin\\.html", "dest": "/api/index.js" },
+    { "src": "/js/admin\\.js", "dest": "/api/index.js" },
     { "src": "/js/data\\.js", "dest": "/api/index.js" },
     { "src": "/(.*)", "dest": "/$1" }
   ]
