@@ -286,6 +286,21 @@
   justify-content: center;
 }
 .btn-buy-now:hover { border-color: var(--color-accent); color: var(--color-accent); }
+.btn-share-product {
+  width: 100%;
+  padding: 13px 22px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.045);
+  color: var(--color-text);
+  font-weight: 800;
+  transition: all var(--transition);
+}
+.btn-share-product:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: rgba(0,255,136,.08);
+}
 
 /* Trust signals */
 .product-trust {

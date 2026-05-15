@@ -184,3 +184,52 @@ const Cart = (() => {
 
   return { add, remove, updateQty, clear, getItems, getCount, getSubtotal, openDrawer, closeDrawer, showToast };
 })();
+
+window.ShareBook = (() => {
+  function productUrl(book) {
+    return new URL(`producto.html?slug=${encodeURIComponent(book.slug)}`, window.location.origin).href;
+  }
+
+  async function copyToClipboard(text) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    const input = document.createElement("textarea");
+    input.value = text;
+    input.setAttribute("readonly", "");
+    input.style.position = "fixed";
+    input.style.left = "-9999px";
+    document.body.appendChild(input);
+    input.select();
+    const copied = document.execCommand("copy");
+    input.remove();
+    return copied;
+  }
+
+  async function share(bookOrId) {
+    const book = typeof bookOrId === "object" ? bookOrId : getBookById(Number(bookOrId));
+    if (!book) return;
+    const url = productUrl(book);
+    const payload = {
+      title: `${book.title} | Jugá en Grande`,
+      text: `Mirá este libro: ${book.title} de ${book.author}.`,
+      url
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(payload);
+        return;
+      }
+      await copyToClipboard(url);
+      Cart.showToast("Link del libro copiado para compartir");
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      const copied = await copyToClipboard(url).catch(() => false);
+      Cart.showToast(copied ? "Link del libro copiado" : "No se pudo copiar el link");
+    }
+  }
+
+  return { share, productUrl };
+})();

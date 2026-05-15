@@ -153,6 +153,7 @@
           ${isDigital ? `<span class="book-badge">Descarga digital</span>` : ""}
           ${!isDigital && book.badge ? `<span class="book-badge ${book.badge === "sale" ? "badge-sale" : book.badge === "new" ? "badge-new" : ""}">${badgeLabel(book.badge)}</span>` : ""}
           <button class="book-wishlist-btn" onclick="event.stopPropagation(); toggleWishlist(${book.id}, this)" aria-label="Guardar en favoritos">♡</button>
+          <button class="book-share-btn" onclick="event.stopPropagation(); ShareBook.share(${book.id})" aria-label="Compartir libro">↗</button>
           <img src="${book.cover}" alt="Portada de ${book.title}" loading="lazy" />
           <div class="book-card-quick-add">
             <button data-add-to-cart="${book.id}" onclick="event.stopPropagation()">Añadir al carrito</button>

@@ -341,6 +341,25 @@ ul { list-style: none; }
   border: 1px solid rgba(255,255,255,.14);
 }
 .book-wishlist-btn.active, .book-wishlist-btn:hover { color: #06100b; background: var(--color-accent); }
+.book-share-btn {
+  position: absolute;
+  top: 52px;
+  right: 10px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  background: rgba(0,0,0,.55);
+  border: 1px solid rgba(255,255,255,.14);
+  font-weight: 900;
+}
+.book-share-btn:hover {
+  color: #06100b;
+  background: var(--color-accent);
+}
 .book-card-quick-add { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 2; opacity: 0; transform: translateY(8px); transition: all var(--transition); }
 .book-card:hover .book-card-quick-add { opacity: 1; transform: translateY(0); }
 .book-card-quick-add button { width: 100%; padding: 10px; border-radius: var(--radius-sm); background: var(--color-accent); color: #06100b; font-weight: 900; }

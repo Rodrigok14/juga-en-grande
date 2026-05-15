@@ -158,6 +158,7 @@
         <div class="product-cta">
           <button class="btn-add-cart" id="add-to-cart-btn">🛒 Añadir al carrito</button>
           <button class="btn-buy-now" id="buy-now-btn">⚡ Comprar ahora</button>
+          <button class="btn-share-product" id="share-product-btn">↗ Compartir libro</button>
         </div>
 
         <div class="product-trust">
@@ -277,6 +278,10 @@
     window.location.href = "carrito.html";
   });
 
+  document.getElementById("share-product-btn")?.addEventListener("click", () => {
+    ShareBook.share(book);
+  });
+
   const stickyCta = document.getElementById("sticky-cta");
   const stickyTitle = document.getElementById("sticky-title");
   const stickyPrice = document.getElementById("sticky-price");
@@ -305,6 +310,7 @@
         <div class="book-card" onclick="window.location.href='producto.html?slug=${item.slug}'" style="cursor:pointer;min-width:200px">
           <div class="book-card-cover">
             ${item.badge ? `<span class="book-badge badge-${item.badge}">${item.badge === "bestseller" ? "🔥" : item.badge === "new" ? "✨" : "🏷️"}</span>` : ""}
+            <button class="book-share-btn" onclick="event.stopPropagation(); ShareBook.share(${item.id})" aria-label="Compartir libro">↗</button>
             <img src="${item.cover}" alt="${item.title}" loading="lazy" />
             <div class="book-card-quick-add"><button data-add-to-cart="${item.id}" onclick="event.stopPropagation()">🛒 Añadir</button></div>
           </div>

@@ -126,6 +126,7 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="book-card" onclick="window.location.href='producto.html?slug=${b.slug}'" style="cursor:pointer;min-width:200px">
         <div class="book-card-cover">
           ${b.badge ? `<span class="book-badge badge-${b.badge}">${b.badge === "bestseller" ? "🔥" : "✨"}</span>` : ""}
+          <button class="book-share-btn" onclick="event.stopPropagation(); ShareBook.share(${b.id})" aria-label="Compartir libro">↗</button>
           <img src="${b.cover}" alt="${b.title}" loading="lazy" />
           <div class="book-card-quick-add"><button data-add-to-cart="${b.id}" onclick="event.stopPropagation()">🛒 Añadir</button></div>
         </div>

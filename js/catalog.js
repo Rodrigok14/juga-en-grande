@@ -151,7 +151,8 @@ document.addEventListener("DOMContentLoaded", () => {
       <div class="book-card" id="book-${b.id}">
         <div class="book-card-cover" onclick="window.location.href='producto.html?slug=${b.slug}'" style="cursor:pointer">
           ${b.badge ? `<span class="book-badge badge-${b.badge}">${b.badge === "bestseller" ? "🔥 Best" : b.badge === "new" ? "✨ Nuevo" : "🏷️ Oferta"}</span>` : ""}
-          <button class="book-wishlist-btn" onclick="toggleWishlist(${b.id}, this)" aria-label="Favoritos">♡</button>
+          <button class="book-wishlist-btn" onclick="event.stopPropagation(); toggleWishlist(${b.id}, this)" aria-label="Favoritos">♡</button>
+          <button class="book-share-btn" onclick="event.stopPropagation(); ShareBook.share(${b.id})" aria-label="Compartir libro">↗</button>
           <img src="${b.cover}" alt="${b.title}" loading="lazy" />
           <div class="book-card-quick-add">
             <button data-add-to-cart="${b.id}">🛒 Añadir al carrito</button>
