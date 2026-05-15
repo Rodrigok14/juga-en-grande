@@ -504,6 +504,36 @@ function clientBlobsFromBody(body, fieldname) {
   return parseJsonArray(body?.[fieldname]).map(normalizeClientBlob).filter(Boolean);
 }
 
+function digitalManifestAssets(value) {
+  return parseJsonArray(value)
+    .map(item => {
+      if (typeof item === "string") return { name: item };
+      if (!item || typeof item !== "object") return null;
+      const url = String(item.url || "").trim();
+      const name = String(item.name || item.pathname || url.split("/").pop() || "archivo.pdf");
+      return { name, url, contentType: String(item.contentType || "") };
+    })
+    .filter(Boolean);
+}
+
+function digitalManifestNames(value) {
+  return digitalManifestAssets(value).map(item => item.name).filter(Boolean);
+}
+
+function digitalDownloadAssets(row) {
+  const assets = digitalManifestAssets(row.digital_files_manifest).filter(item => /^https?:\/\//i.test(item.url || ""));
+  if (assets.length) return assets;
+  if (!row.digital_file_url) return [];
+  return [{
+    name: row.digital_file_name || `${row.title || "archivo"}.pdf`,
+    url: row.digital_file_url
+  }];
+}
+
+function digitalAssetId(productId, index) {
+  return index == null ? String(productId) : `${productId}:${index}`;
+}
+
 async function persistBinaryFile({ folder, filename, buffer, contentType }) {
   const safeName = safeUploadFilename(filename);
 
@@ -624,61 +654,44 @@ async function persistClientUploadedDigitalFiles(blobFiles = [], options = {}) {
 
   const shouldMergeWithExisting = Boolean(options.existingUrl) && pdfFiles.length > 0;
 
-  if (pdfFiles.length === 1 && !shouldMergeWithExisting) {
-    const pdfFile = pdfFiles[0];
-    const preview = await buildPdfPreviewFromStoredFile(pdfFile.url, pdfFile.name).catch(error => {
-      console.error("Preview generation error", error);
-      return null;
-    });
+  if (pdfFiles.length > 1 || shouldMergeWithExisting) {
+    const existingAssets = digitalManifestAssets(options.existingManifest).filter(item => item.url);
+    if (shouldMergeWithExisting && existingAssets.length === 0 && options.existingUrl) {
+      existingAssets.push({
+        name: options.existingName || "archivo-digital.pdf",
+        url: options.existingUrl
+      });
+    }
+    const assets = [
+      ...existingAssets,
+      ...pdfFiles.map(file => ({
+        name: file.name || "archivo.pdf",
+        url: file.url,
+        contentType: file.contentType || "application/pdf"
+      }))
+    ];
+
     return {
-      url: pdfFile.url,
-      name: pdfFile.name || "archivo-digital.pdf",
-      manifest: [pdfFile.name || "archivo-digital.pdf"],
-      previewUrl: preview?.url || null,
-      previewName: preview?.name || null
+      url: assets[0]?.url || null,
+      name: assets.length === 1 ? assets[0].name : `${assets.length} archivos digitales`,
+      manifest: assets,
+      previewUrl: null,
+      previewName: null
     };
   }
 
-  if (pdfFiles.length > 1 || shouldMergeWithExisting) {
-    const zip = new AdmZip();
-    const manifest = [];
-
-    if (shouldMergeWithExisting) {
-      const existingEntries = await loadStoredDigitalEntries(options.existingUrl, options.existingName);
-      for (const entry of existingEntries) {
-        const entryName = uniqueZipEntryName(zip, entry.name);
-        zip.addFile(entryName, entry.buffer);
-        manifest.push(entryName);
-      }
-    }
-
-    for (const file of pdfFiles) {
-      const entryName = uniqueZipEntryName(zip, file.name || "archivo.pdf");
-      zip.addFile(entryName, await digitalBufferFromStoredUrl(file.url));
-      manifest.push(entryName);
-    }
-
-    const zipBuffer = zip.toBuffer();
-    const existingName = String(options.existingName || "");
-    const zipName = existingName.toLowerCase().endsWith(".zip")
-      ? existingName
-      : `pack-${Date.now()}.zip`;
-    const storedUrl = await persistBinaryFile({
-      folder: "digital-products",
-      filename: zipName,
-      buffer: zipBuffer,
-      contentType: "application/zip"
-    });
-    const preview = await buildPdfPreviewFromStoredFile(pdfFiles[0].url, pdfFiles[0].name).catch(error => {
-      console.error("Preview generation error", error);
-      return null;
-    });
+  if (pdfFiles.length === 1 && !shouldMergeWithExisting) {
+    const pdfFile = pdfFiles[0];
     return {
-      url: storedUrl,
-      name: zipName,
-      manifest,
-      previewUrl: preview?.url || null,
-      previewName: preview?.name || null
+      url: pdfFile.url,
+      name: pdfFile.name || "archivo-digital.pdf",
+      manifest: [{
+        name: pdfFile.name || "archivo-digital.pdf",
+        url: pdfFile.url,
+        contentType: pdfFile.contentType || "application/pdf"
+      }],
+      previewUrl: null,
+      previewName: null
     };
   }
 
@@ -934,7 +947,7 @@ function productRow(row, options = {}) {
   const normalizedGallery = [normalizeImageUrl(row.image), ...galleryImages]
     .filter(Boolean)
     .filter((value, index, items) => items.indexOf(value) === index);
-  const digitalFilesManifest = parseJsonArray(row.digital_files_manifest).filter(Boolean);
+  const digitalFilesManifest = digitalManifestNames(row.digital_files_manifest);
 
   const item = {
     id: row.id,
@@ -987,7 +1000,7 @@ function comboRow(row, items = []) {
     featured: row.featured !== 0,
     linkedProductId: row.linked_product_id || null,
     digitalFileName: row.digital_file_name || "",
-    digitalFilesManifest: parseJsonArray(row.digital_files_manifest).filter(Boolean),
+    digitalFilesManifest: digitalManifestNames(row.digital_files_manifest),
     hasDigitalPack: Boolean(row.digital_file_url),
     items
   };
@@ -1019,20 +1032,22 @@ async function listDigitalOrderItems(order) {
   if (digitalIds.length === 0) return [];
 
   const { rows } = await pool.query(
-    `SELECT id, title, digital_file_url, digital_file_name
+    `SELECT id, title, digital_file_url, digital_file_name, digital_files_manifest
      FROM products
      WHERE id = ANY($1::int[])`,
     [digitalIds]
   );
 
-  return rows
-    .filter(row => row.digital_file_url)
-    .map(row => ({
-      id: row.id,
-      title: row.title,
-      fileName: row.digital_file_name || `${row.title}.pdf`,
-      hasFile: Boolean(row.digital_file_url)
+  return rows.flatMap(row => {
+    const assets = digitalDownloadAssets(row);
+    if (assets.length === 0) return [];
+    return assets.map((asset, index) => ({
+      id: digitalAssetId(row.id, assets.length > 1 ? index : null),
+      title: assets.length > 1 ? `${row.title} - ${asset.name}` : row.title,
+      fileName: asset.name || row.digital_file_name || `${row.title}.pdf`,
+      hasFile: true
     }));
+  });
 }
 
 async function loadDigitalEmailAttachments(order) {
@@ -1047,7 +1062,7 @@ async function loadDigitalEmailAttachments(order) {
   if (digitalIds.length === 0) return [];
 
   const { rows } = await pool.query(
-    `SELECT id, title, digital_file_url, digital_file_name
+    `SELECT id, title, digital_file_url, digital_file_name, digital_files_manifest
      FROM products
      WHERE id = ANY($1::int[])`,
     [digitalIds]
@@ -1058,11 +1073,16 @@ async function loadDigitalEmailAttachments(order) {
   const maxTotalBytes = 18 * 1024 * 1024;
 
   for (const row of rows) {
+    const manifestAssets = digitalManifestAssets(row.digital_files_manifest).filter(item => item.url);
+    if (manifestAssets.length > 1) continue;
     if (!row.digital_file_url) continue;
 
     let buffer;
     let contentType = "application/octet-stream";
     if (/^https?:\/\//i.test(row.digital_file_url)) {
+      const head = await fetch(row.digital_file_url, { method: "HEAD" }).catch(() => null);
+      const contentLength = Number(head?.headers?.get("content-length") || 0);
+      if (contentLength && totalBytes + contentLength > maxTotalBytes) continue;
       const remote = await fetch(row.digital_file_url);
       if (!remote.ok) continue;
       contentType = remote.headers.get("content-type") || contentType;
@@ -1092,6 +1112,9 @@ async function loadDigitalEmailAttachments(order) {
 
 async function streamStoredFile(res, fileUrl, downloadName, disposition = "attachment") {
   if (/^https?:\/\//i.test(fileUrl)) {
+    if (disposition === "attachment") {
+      return res.redirect(fileUrl);
+    }
     const remote = await fetch(fileUrl);
     if (!remote.ok) throw new Error("No se pudo obtener el archivo");
     const bytes = Buffer.from(await remote.arrayBuffer());
@@ -1319,7 +1342,8 @@ app.put("/api/products/:id", requireAdmin, productUpload, async (req, res) => {
     const uploadedGalleryImages = await persistUploadedImages(galleryImageFiles);
     const digitalOptions = {
       existingUrl: existingRows[0].digital_file_url,
-      existingName: existingRows[0].digital_file_name
+      existingName: existingRows[0].digital_file_name,
+      existingManifest: existingRows[0].digital_files_manifest
     };
     const uploadedDigital = digitalFileBlobs.length
       ? await persistClientUploadedDigitalFiles(digitalFileBlobs, digitalOptions)
@@ -1681,18 +1705,31 @@ app.get("/api/orders/access/:id/download/:productId", async (req, res) => {
     if (order.delivery_type !== "digital") return res.status(400).json({ error: "Este pedido no tiene descargas digitales" });
 
     const items = JSON.parse(order.items_json || "[]");
-    const orderedProduct = items.find(item => Number(item.id) === Number(req.params.productId) && normalizeFormat(item.format) === "digital");
+    const [rawProductId, rawAssetIndex] = String(req.params.productId || "").split(":");
+    const productId = Number(rawProductId);
+    const assetIndex = rawAssetIndex == null ? null : Number(rawAssetIndex);
+    if (!Number.isInteger(productId) || productId <= 0) {
+      return res.status(400).json({ error: "Producto invalido" });
+    }
+    if (assetIndex != null && (!Number.isInteger(assetIndex) || assetIndex < 0)) {
+      return res.status(400).json({ error: "Archivo invalido" });
+    }
+
+    const orderedProduct = items.find(item => Number(item.id) === productId && normalizeFormat(item.format) === "digital");
     if (!orderedProduct) return res.status(404).json({ error: "Archivo no encontrado para este pedido" });
 
     const { rows } = await pool.query(
-      "SELECT title, digital_file_url, digital_file_name FROM products WHERE id = $1",
-      [req.params.productId]
+      "SELECT title, digital_file_url, digital_file_name, digital_files_manifest FROM products WHERE id = $1",
+      [productId]
     );
     const product = rows[0];
-    if (!product?.digital_file_url) return res.status(404).json({ error: "El archivo digital no esta disponible" });
+    const assets = product ? digitalDownloadAssets(product) : [];
+    if (assets.length === 0) return res.status(404).json({ error: "El archivo digital no esta disponible" });
+    const asset = assets[assetIndex ?? 0];
+    if (!asset?.url) return res.status(404).json({ error: "Archivo no encontrado" });
 
-    const downloadName = product.digital_file_name || `${product.title}.pdf`;
-    await streamStoredFile(res, product.digital_file_url, downloadName, "attachment");
+    const downloadName = asset.name || product.digital_file_name || `${product.title}.pdf`;
+    await streamStoredFile(res, asset.url, downloadName, "attachment");
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1836,7 +1873,7 @@ app.get("/js/data.js", async (_req, res) => {
       stock: row.stock,
       displayOrder: Number(row.display_order || 0),
       hasDigitalFile: Boolean(row.digital_file_url),
-      digitalFilesManifest: parseJsonArray(row.digital_files_manifest).filter(Boolean),
+      digitalFilesManifest: digitalManifestNames(row.digital_files_manifest),
       hasPreview: Boolean(row.preview_file_url),
       previewUrl: row.preview_file_url ? `/api/products/${row.id}/preview` : "",
       sourceType: row.source_type || "product",
