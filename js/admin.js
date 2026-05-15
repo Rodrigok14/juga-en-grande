@@ -459,8 +459,10 @@ async function uploadAdminFile(file, type, button) {
     .toLowerCase()
     .replace(/[^a-z0-9.]+/g, "-");
   const folder = type === "image" ? "admin-images" : "admin-digital";
+  const contentType = inferUploadContentType(file, type);
   const blob = await upload(`${folder}/${Date.now()}-${safeName}`, file, {
     access: "public",
+    contentType,
     multipart: file.size > 8 * 1024 * 1024,
     handleUploadUrl: "/api/blob/upload",
     clientPayload: JSON.stringify({ type }),
@@ -473,8 +475,21 @@ async function uploadAdminFile(file, type, button) {
     url: blob.url,
     pathname: blob.pathname || safeName,
     name: file.name,
-    contentType: file.type
+    contentType
   };
+}
+
+function inferUploadContentType(file, type) {
+  const current = String(file.type || "").trim();
+  if (current) return current;
+  const name = String(file.name || "").toLowerCase();
+  if (name.endsWith(".pdf")) return "application/pdf";
+  if (name.endsWith(".zip")) return "application/zip";
+  if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".webp")) return "image/webp";
+  if (type === "image") return "image/jpeg";
+  return "application/pdf";
 }
 
 function money(value) {
