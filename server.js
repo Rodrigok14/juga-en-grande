@@ -31,6 +31,12 @@ function safeUploadFilename(originalname = "image") {
   return `${Date.now()}-${safe || "image"}`;
 }
 
+function sendNoStoreFile(res, filePath, contentType) {
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  if (contentType) res.setHeader("Content-Type", contentType);
+  return res.sendFile(path.join(root, filePath));
+}
+
 const upload = multer({
   storage: isVercel ? multer.memoryStorage() : multer.diskStorage({
     destination: (_req, file, cb) => {
@@ -1209,8 +1215,8 @@ app.get("/api/products", async (req, res) => {
     `);
     res.json({ products: rows.map(row => productRow(row, { includePrivate: Boolean(adminSession) })) });
   } catch (err) {
-    console.error("Product create error", err);
-    res.status(500).json({ error: err.message || "No se pudo guardar el producto" });
+    console.error("Product list error", err);
+    res.status(500).json({ error: err.message || "No se pudieron cargar los productos" });
   }
 });
 
@@ -1220,8 +1226,8 @@ app.get("/api/products/:id", async (req, res) => {
     if (rows.length === 0) return res.status(404).json({ error: "Producto no encontrado" });
     res.json({ product: productRow(rows[0]) });
   } catch (err) {
-    console.error("Product update error", err);
-    res.status(500).json({ error: err.message || "No se pudo actualizar el producto" });
+    console.error("Product read error", err);
+    res.status(500).json({ error: err.message || "No se pudo cargar el producto" });
   }
 });
 
@@ -1264,7 +1270,23 @@ const productUpload = upload.fields([
   { name: "digitalFiles", maxCount: 20 }
 ]);
 
-app.post("/api/products", requireAdmin, productUpload, async (req, res) => {
+function handleProductUpload(req, res, next) {
+  productUpload(req, res, error => {
+    if (!error) return next();
+    console.error("Product upload middleware error", {
+      message: error.message,
+      code: error.code,
+      field: error.field,
+      stack: error.stack
+    });
+    const message = error.code === "LIMIT_FILE_SIZE"
+      ? "El archivo es demasiado grande para enviarlo directo. Recarga el admin con Ctrl + F5 y vuelve a intentar la subida."
+      : error.message || "No se pudo recibir el archivo";
+    res.status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({ error: message });
+  });
+}
+
+app.post("/api/products", requireAdmin, handleProductUpload, async (req, res) => {
   try {
     const body = req.body;
     const format = body.format || "fisico";
@@ -1320,11 +1342,18 @@ app.post("/api/products", requireAdmin, productUpload, async (req, res) => {
     await rebuildCombosForProduct(rows[0].id);
     res.status(201).json({ ok: true, id: rows[0].id });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Product create error", {
+      message: err.message,
+      code: err.code,
+      constraint: err.constraint,
+      detail: err.detail,
+      stack: err.stack
+    });
+    res.status(500).json({ error: err.message || "No se pudo guardar el producto" });
   }
 });
 
-app.put("/api/products/:id", requireAdmin, productUpload, async (req, res) => {
+app.put("/api/products/:id", requireAdmin, handleProductUpload, async (req, res) => {
   try {
     const { rows: existingRows } = await pool.query("SELECT * FROM products WHERE id = $1 AND deleted_at IS NULL", [req.params.id]);
     if (existingRows.length === 0) return res.status(404).json({ error: "Producto no encontrado" });
@@ -1407,7 +1436,14 @@ app.put("/api/products/:id", requireAdmin, productUpload, async (req, res) => {
     await rebuildCombosForProduct(req.params.id);
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Product update error", {
+      message: err.message,
+      code: err.code,
+      constraint: err.constraint,
+      detail: err.detail,
+      stack: err.stack
+    });
+    res.status(500).json({ error: err.message || "No se pudo actualizar el producto" });
   }
 });
 
@@ -1421,7 +1457,14 @@ app.delete("/api/products/:id", requireAdmin, async (req, res) => {
     await rebuildCombosForProduct(req.params.id);
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("Product delete error", {
+      message: err.message,
+      code: err.code,
+      constraint: err.constraint,
+      detail: err.detail,
+      stack: err.stack
+    });
+    res.status(500).json({ error: err.message || "No se pudo eliminar el producto" });
   }
 });
 
@@ -2259,6 +2302,8 @@ app.post("/api/webhooks/mercadopago", async (req, res) => {
 if (!isVercel) {
   app.use("/assets/uploads", express.static(publicUploadsDir));
 }
+app.get("/admin.html", (_req, res) => sendNoStoreFile(res, "admin.html", "text/html; charset=utf-8"));
+app.get("/js/admin.js", (_req, res) => sendNoStoreFile(res, path.join("js", "admin.js"), "application/javascript; charset=utf-8"));
 app.use(express.static(root));
 backfillMissingPreviews();
 
