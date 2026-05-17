@@ -4,3 +4,5 @@ data/*.sqlite
 data/*.sqlite-*
 server-error.log
 server-out.log
+
+.vercel

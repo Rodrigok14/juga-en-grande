@@ -29,11 +29,28 @@ const upload = multer({
     destination: uploadsDir,
     filename: (_req, file, cb) => cb(null, safeUploadFilename(file.originalname))
   }),
-  limits: { fileSize: 4 * 1024 * 1024 }
+  // PDFs e imágenes pueden ser pesados; ajusta si lo necesitás.
+  limits: { fileSize: 25 * 1024 * 1024 }
 });
 
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+function badRequest(res, error) {
+  return res.status(400).json({ error: String(error || "Solicitud inválida") });
+}
+
+function parseNonNegativeInt(value, fallback = 0) {
+  const n = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, n);
+}
+
+function parseMoneyCents(value) {
+  const cents = moneyToCents(value);
+  if (!Number.isFinite(cents) || Number.isNaN(cents)) return null;
+  return Math.max(0, Math.trunc(cents));
+}
 
 function normalizeImageUrl(value) {
   const v = String(value || "").trim();
@@ -42,29 +59,59 @@ function normalizeImageUrl(value) {
   return v.startsWith("/") ? v : `/${v}`;
 }
 
-async function persistUploadedImage(file) {
+function assertBlobTokenConfigured() {
+  const token = String(
+    // Nombre recomendado
+    process.env.BLOB_READ_WRITE_TOKEN ||
+    // Back-compat: si se configuró con doble guión bajo (como en tu panel)
+    process.env.BLOB_READ_WRITE_TOKEN ||
+    ""
+  ).trim();
+  if (!token) {
+    throw new Error("Falta configurar BLOB_READ_WRITE_TOKEN (o BLOB_READ_WRITE_TOKEN) para guardar archivos en Vercel Blob");
+  }
+  // Mensaje más claro cuando el token es incorrecto (esto suele terminar en 400 en /api/blob).
+  if (!/^vercel_blob_rw_/i.test(token)) {
+    throw new Error("BLOB_READ_WRITE_TOKEN parece inválido (debe ser un token Read/Write de Vercel Blob: vercel_blob_rw_...).");
+  }
+  return token;
+}
+
+async function persistUploadedFile(file, { folder, allowedContentTypes } = {}) {
   if (!file) return null;
   const contentType = file.mimetype || "application/octet-stream";
-  if (!/^image\//i.test(contentType)) {
-    throw new Error("El archivo subido debe ser una imagen");
+
+  if (Array.isArray(allowedContentTypes) && allowedContentTypes.length > 0) {
+    const ok = allowedContentTypes.some(type => {
+      if (type instanceof RegExp) return type.test(contentType);
+      return String(type).toLowerCase() === String(contentType).toLowerCase();
+    });
+    if (!ok) throw new Error(`Tipo de archivo no permitido (${contentType}).`);
   }
 
   // Vercel: persist to Blob and store public URL
   if (isVercel) {
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
-      throw new Error("Falta configurar BLOB_READ_WRITE_TOKEN para guardar imágenes en Vercel Blob");
-    }
+    const token = assertBlobTokenConfigured();
     const filename = safeUploadFilename(file.originalname);
-    const blob = await put(`covers/${filename}`, file.buffer, {
+    const key = `${String(folder || "uploads").replace(/\/+$/g, "")}/${filename}`;
+    const blob = await put(key, file.buffer, {
       access: "public",
       contentType,
-      token: process.env.BLOB_READ_WRITE_TOKEN
+      token
     });
     return blob.url;
   }
 
   // Local: multer already wrote to disk
   return `/assets/uploads/${file.filename}`;
+}
+
+async function persistUploadedImage(file) {
+  return persistUploadedFile(file, { folder: "covers", allowedContentTypes: [/^image\//i] });
+}
+
+async function persistUploadedPdf(file) {
+  return persistUploadedFile(file, { folder: "pdf", allowedContentTypes: ["application/pdf"] });
 }
 
 function productRow(row) {
@@ -152,6 +199,16 @@ app.get("/api/products/:id", async (req, res) => {
 app.post("/api/products", requireAdmin, upload.single("image"), async (req, res) => {
   try {
     const body = req.body;
+    if (!String(body.slug || "").trim()) return badRequest(res, "Falta slug");
+    if (!String(body.title || "").trim()) return badRequest(res, "Falta título");
+
+    const priceCents = parseMoneyCents(body.price);
+    if (priceCents == null) return badRequest(res, "Precio inválido");
+    if (priceCents <= 0) return badRequest(res, "El precio debe ser mayor que 0");
+    let oldPriceCents = String(body.oldPrice || "").trim() ? parseMoneyCents(body.oldPrice) : null;
+    if (String(body.oldPrice || "").trim() && oldPriceCents == null) return badRequest(res, "Precio anterior inválido");
+    if (oldPriceCents != null && oldPriceCents <= 0) oldPriceCents = null;
+
     const uploaded = await persistUploadedImage(req.file);
     const image = uploaded || normalizeImageUrl(body.image) || DEFAULT_IMAGE;
     const { rows } = await pool.query(`
@@ -162,10 +219,10 @@ app.post("/api/products", requireAdmin, upload.single("image"), async (req, res)
       body.title,
       body.author || "",
       body.category || "negocios",
-      moneyToCents(body.price),
-      body.oldPrice ? moneyToCents(body.oldPrice) : null,
+      priceCents,
+      oldPriceCents,
       body.format || "fisico",
-      Number(body.stock || 0),
+      parseNonNegativeInt(body.stock, 0),
       image,
       body.description || "",
       body.active === "0" ? 0 : 1
@@ -182,6 +239,16 @@ app.put("/api/products/:id", requireAdmin, upload.single("image"), async (req, r
     if (existingRows.length === 0) return res.status(404).json({ error: "Producto no encontrado" });
     
     const body = req.body;
+    if (!String(body.slug || "").trim()) return badRequest(res, "Falta slug");
+    if (!String(body.title || "").trim()) return badRequest(res, "Falta título");
+
+    const priceCents = parseMoneyCents(body.price);
+    if (priceCents == null) return badRequest(res, "Precio inválido");
+    if (priceCents <= 0) return badRequest(res, "El precio debe ser mayor que 0");
+    let oldPriceCents = String(body.oldPrice || "").trim() ? parseMoneyCents(body.oldPrice) : null;
+    if (String(body.oldPrice || "").trim() && oldPriceCents == null) return badRequest(res, "Precio anterior inválido");
+    if (oldPriceCents != null && oldPriceCents <= 0) oldPriceCents = null;
+
     const uploaded = await persistUploadedImage(req.file);
     const image = uploaded || normalizeImageUrl(body.image || existingRows[0].image);
     
@@ -196,10 +263,10 @@ app.put("/api/products/:id", requireAdmin, upload.single("image"), async (req, r
       body.title,
       body.author || "",
       body.category || "negocios",
-      moneyToCents(body.price),
-      body.oldPrice ? moneyToCents(body.oldPrice) : null,
+      priceCents,
+      oldPriceCents,
       body.format || "fisico",
-      Number(body.stock || 0),
+      parseNonNegativeInt(body.stock, 0),
       image,
       body.description || "",
       body.active === "0" ? 0 : 1,
@@ -245,13 +312,19 @@ app.get("/api/combos", async (req, res) => {
 app.post("/api/combos", requireAdmin, upload.single("image"), async (req, res) => {
   try {
     const body = req.body;
+    if (!String(body.slug || "").trim()) return badRequest(res, "Falta slug");
+    if (!String(body.title || "").trim()) return badRequest(res, "Falta título");
+    const priceCents = parseMoneyCents(body.price);
+    if (priceCents == null) return badRequest(res, "Precio inválido");
+    if (priceCents <= 0) return badRequest(res, "El precio debe ser mayor que 0");
+
     const uploaded = await persistUploadedImage(req.file);
     const image = uploaded || normalizeImageUrl(body.image) || DEFAULT_IMAGE;
     
     const { rows } = await pool.query(`
       INSERT INTO combos (slug, title, price, description, image, active)
       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
-    `, [body.slug, body.title, moneyToCents(body.price), body.description || "", image, body.active === "0" ? 0 : 1]);
+    `, [body.slug, body.title, priceCents, body.description || "", image, body.active === "0" ? 0 : 1]);
     
     const comboId = rows[0].id;
     await saveComboItems(comboId, body.productIds);
@@ -267,6 +340,12 @@ app.put("/api/combos/:id", requireAdmin, upload.single("image"), async (req, res
     if (existingRows.length === 0) return res.status(404).json({ error: "Combo no encontrado" });
     
     const body = req.body;
+    if (!String(body.slug || "").trim()) return badRequest(res, "Falta slug");
+    if (!String(body.title || "").trim()) return badRequest(res, "Falta título");
+    const priceCents = parseMoneyCents(body.price);
+    if (priceCents == null) return badRequest(res, "Precio inválido");
+    if (priceCents <= 0) return badRequest(res, "El precio debe ser mayor que 0");
+
     const uploaded = await persistUploadedImage(req.file);
     const image = uploaded || normalizeImageUrl(body.image || existingRows[0].image);
     
@@ -274,7 +353,7 @@ app.put("/api/combos/:id", requireAdmin, upload.single("image"), async (req, res
       UPDATE combos
       SET slug=$1, title=$2, price=$3, description=$4, image=$5, active=$6, updated_at=CURRENT_TIMESTAMP
       WHERE id=$7
-    `, [body.slug, body.title, moneyToCents(body.price), body.description || "", image, body.active === "0" ? 0 : 1, req.params.id]);
+    `, [body.slug, body.title, priceCents, body.description || "", image, body.active === "0" ? 0 : 1, req.params.id]);
     
     await saveComboItems(req.params.id, body.productIds);
     res.json({ ok: true });
@@ -304,7 +383,15 @@ async function saveComboItems(comboId, productIds) {
 app.get("/api/orders", requireAdmin, async (_req, res) => {
   try {
     const { rows } = await pool.query("SELECT * FROM orders ORDER BY id DESC LIMIT 100");
-    res.json({ orders: rows.map(row => ({ ...row, total: centsToAmount(row.total), items: JSON.parse(row.items_json || "[]") })) });
+    res.json({
+      orders: rows.map(row => {
+        let items = [];
+        try {
+          items = JSON.parse(row.items_json || "[]");
+        } catch {}
+        return { ...row, total: centsToAmount(row.total), items };
+      })
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -421,8 +508,9 @@ app.post("/api/checkout/mercadopago", async (req, res) => {
 
     if (items.length === 0) return res.status(400).json({ error: "El carrito está vacío" });
 
+    // Prices are stored in minor units (cents). Keep shipping logic aligned with frontend (free over $25, otherwise $4.99).
     const subtotal = items.reduce((sum, item) => sum + item.product.price * item.qty, 0);
-    const shipping = subtotal >= 250000 ? 0 : 499000;
+    const shipping = subtotal >= 2500 ? 0 : 499;
     const total = subtotal + shipping;
     const buyer = req.body.buyer || {};
 
@@ -509,6 +597,17 @@ app.post("/api/webhooks/mercadopago", async (req, res) => {
   } catch (error) {
     console.error("Mercado Pago webhook error", error);
   }
+});
+
+// Manejo de errores de Multer (por ejemplo, archivo demasiado grande)
+app.use((err, _req, res, next) => {
+  if (err && err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return badRequest(res, "El archivo supera el tamaño máximo permitido (25MB).");
+    }
+    return badRequest(res, err.message || "Error al subir archivo");
+  }
+  return next(err);
 });
 
 // Local only: serve disk uploads

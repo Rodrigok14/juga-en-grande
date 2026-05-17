@@ -276,7 +276,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="book-card-cover">
             ${b.badge ? `<span class="book-badge badge-${b.badge}">${b.badge === "bestseller" ? "🔥" : b.badge === "new" ? "✨" : "🏷️"}</span>` : ""}
             <img src="${b.cover}" alt="${b.title}" loading="lazy" />
-            <div class="book-card-quick-add"><button data-add-to-cart="${b.id}" onclick="event.stopPropagation()">🛒 Añadir</button></div>
+            <div class="book-card-quick-add"><button data-add-to-cart="${b.id}" onclick="event.stopPropagation()">🛒 Añadir al carrito</button></div>
           </div>
           <div class="book-card-body">
             <div class="book-title">${b.title}</div>

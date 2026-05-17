@@ -226,14 +226,24 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderPagination(pages) {
     const pg = document.getElementById("pagination");
     if (!pg || pages <= 1) { if (pg) pg.innerHTML = ""; return; }
-    let html = "";
-    const max = 7;
-    for (let i = 1; i <= Math.min(pages, max); i++) {
-      html += `<button class="page-btn ${i === state.page ? "active" : ""}" data-page="${i}">${i}</button>`;
-    }
-    if (pages > max) html += `<span style="padding:0 8px;color:var(--color-text-3)">…</span>`;
-    pg.innerHTML = html;
-    pg.querySelectorAll(".page-btn").forEach(btn => {
+    const isFirst = state.page <= 1;
+    const isLast = state.page >= pages;
+
+    pg.innerHTML = `
+      <button class="catalog-page-btn catalog-page-prev" data-page="${state.page - 1}" ${isFirst ? "disabled" : ""} aria-label="Ver libros anteriores">
+        ←
+      </button>
+      <div class="catalog-page-status">
+        <span>Mostrando página</span>
+        <strong>${state.page} de ${pages}</strong>
+      </div>
+      <button class="catalog-page-btn catalog-page-next" data-page="${state.page + 1}" ${isLast ? "disabled" : ""} aria-label="Ver más libros">
+        <span>Ver más libros</span>
+        <b aria-hidden="true">→</b>
+      </button>
+    `;
+
+    pg.querySelectorAll(".catalog-page-btn:not(:disabled)").forEach(btn => {
       btn.addEventListener("click", () => {
         state.page = +btn.dataset.page;
         render();

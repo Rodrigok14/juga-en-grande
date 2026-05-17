@@ -217,6 +217,78 @@
 }
 .filter-chip button { font-size: 1rem; line-height: 1; color: inherit; }
 
+/* Page controls */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-top: 28px;
+}
+.catalog-page-status {
+  min-width: 132px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,.035);
+}
+.catalog-page-status span {
+  display: block;
+  color: var(--color-text-3);
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.catalog-page-status strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--color-text);
+  font-size: 1rem;
+}
+.catalog-page-btn {
+  min-height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(0,255,136,.25);
+  border-radius: var(--radius-md);
+  background: rgba(0,255,136,.08);
+  color: var(--color-text);
+  font-weight: 900;
+  transition: transform var(--transition), border-color var(--transition), background var(--transition), opacity var(--transition);
+}
+.catalog-page-btn:not(:disabled):hover {
+  transform: translateY(-2px);
+  border-color: rgba(0,255,136,.65);
+  background: rgba(0,255,136,.16);
+}
+.catalog-page-btn:disabled {
+  cursor: not-allowed;
+  opacity: .38;
+}
+.catalog-page-prev {
+  width: 54px;
+  font-size: 1.35rem;
+}
+.catalog-page-next {
+  gap: 14px;
+  min-width: 210px;
+  padding: 0 10px 0 22px;
+  background: var(--color-accent);
+  color: #06100b;
+}
+.catalog-page-next b {
+  width: 46px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: rgba(6,16,11,.12);
+  font-size: 2.1rem;
+  line-height: 1;
+}
+
 /* nav active state */
 .nav-link.active { color: var(--color-accent); }
 
@@ -246,4 +318,11 @@
 @media (max-width: 480px) {
   .books-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .sort-select { font-size: 0.82rem; padding: 8px 10px; }
+  .pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .catalog-page-status { order: -1; width: 100%; }
+  .catalog-page-prev,
+  .catalog-page-next { width: 100%; }
 }

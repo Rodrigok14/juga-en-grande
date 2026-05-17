@@ -77,5 +77,5 @@ Para probar webhooks localmente hace falta exponer la app con una URL pública t
 ## Vercel
 
 - Configurá en el proyecto de Vercel: `DATABASE_URL`, `MP_ACCESS_TOKEN`, `ADMIN_USER`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `BASE_URL`, etc.
-- Los archivos subidos con Multer en serverless usan almacenamiento efímero (`/tmp`); en producción conviene **Supabase Storage**, **Cloudinary** o **S3** para portadas.
+- Para subir portadas/archivos en producción, configurá `BLOB_READ_WRITE_TOKEN` (token Read/Write de **Vercel Blob**, formato `vercel_blob_rw_...`). Sin eso, Vercel devuelve errores tipo `400 (Bad Request)` al intentar guardar.
 - Imágenes y datos persisten en tu PostgreSQL gestionado (Neon, Supabase, etc.), no en disco del contenedor.

@@ -28,9 +28,9 @@
   <div class="product-page">
     <!-- Breadcrumb -->
     <div class="breadcrumb container" id="breadcrumb">
-      <a href="index.html">Inicio</a> <span>?</span>
-      <a href="catalogo.html">Catálogo</a> <span>?</span>
-      <span id="breadcrumb-cat"></span> <span>?</span>
+      <a href="index.html">Inicio</a> <span aria-hidden="true">›</span>
+      <a href="catalogo.html">Catálogo</a> <span aria-hidden="true">›</span>
+      <span id="breadcrumb-cat"></span> <span aria-hidden="true">›</span>
       <span id="breadcrumb-title"></span>
     </div>
 
@@ -53,7 +53,7 @@
       <div class="container">
         <div class="section-header-row">
           <div>
-            <div class="section-label">x También te puede gustar</div>
+            <div class="section-label">✨ También te puede gustar</div>
             <h2 class="section-title">Clientes también <em>compraron</em></h2>
           </div>
         </div>
@@ -70,18 +70,18 @@
       <span id="sticky-title"></span>
       <strong id="sticky-price"></strong>
     </div>
-    <button class="btn btn-primary" id="sticky-add-btn">A?adir</button>
+    <button class="btn btn-primary" id="sticky-add-btn">Añadir al carrito</button>
   </div>
 
   <!-- Cart Drawer -->
   <div class="cart-overlay" id="cart-overlay"></div>
   <aside class="cart-drawer" id="cart-drawer">
-    <div class="cart-drawer-header"><h3>Tu carrito</h3><button class="cart-close" id="cart-close">?</button></div>
+    <div class="cart-drawer-header"><h3>Tu carrito</h3><button class="cart-close" id="cart-close" aria-label="Cerrar carrito">×</button></div>
     <div class="cart-drawer-items" id="cart-drawer-items">
-      <div class="cart-empty" id="cart-empty"><div class="cart-empty-icon">JG</div><p>Tu carrito est? vac?o</p><a href="catalogo.html" class="btn btn-primary">Explorar libros</a></div>
+      <div class="cart-empty" id="cart-empty"><div class="cart-empty-icon">JG</div><p>Tu carrito está vacío</p><a href="catalogo.html" class="btn btn-primary">Explorar libros</a></div>
     </div>
     <div class="cart-drawer-footer" id="cart-drawer-footer" style="display:none">
-      <div class="cart-subtotal"><span>?</span><strong id="cart-subtotal-price">$0.00</strong></div>
+      <div class="cart-subtotal"><span>Subtotal</span><strong id="cart-subtotal-price">$0.00</strong></div>
       <div class="cart-free-shipping" id="cart-free-shipping"></div>
       <a href="carrito.html" class="btn btn-primary btn-full">Ver carrito y pagar</a>
     </div>
